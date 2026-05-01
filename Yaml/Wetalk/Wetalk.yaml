@@ -1,0 +1,20 @@
+name: "WeTalk 自动化签到+视频奖励"
+description: "WeTalk 抓取账号参数后，定时执行签到与视频奖励任务。需启用 MitM 并安装证书。"
+author: "TG@ZenMoFiShi, converted for Egern"
+
+scriptings:
+  - http_request:
+      name: "WeTalk 参数抓取"
+      match: '^https://api\.wetalkapp\.com/app/queryBalanceAndBonus'
+      script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Wetalk/Wetalk_capture.js"
+      timeout: 10
+
+  - schedule:
+      name: "WeTalk 签到任务"
+      cron: "0 */6 * * *"
+      script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Wetalk/Wetalk_task.js"
+      timeout: 120
+
+mitm:
+  hostnames:
+    - "api.wetalkapp.com"
