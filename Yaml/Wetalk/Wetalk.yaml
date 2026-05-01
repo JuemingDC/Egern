@@ -1,6 +1,33 @@
 name: "WeTalk 自动化签到+视频奖励"
-description: "WeTalk 抓取账号参数后，定时执行签到与视频奖励任务。需启用 MitM 并安装证书。"
+description: "WeTalk 抓取账号参数后，定时执行签到与视频奖励任务。支持多账号查看、指定运行和删除账号。"
 author: "TG@ZenMoFiShi, converted for Egern"
+
+env_schema:
+  RUN_ACCOUNTS:
+    name: "运行账号"
+    description: "留空运行全部。可填写账号编号、邮箱、账号ID或别名，多个用英文逗号、换行或 @ 分隔。例如：1,2 或 user@example.com"
+    default_value: ""
+
+  DELETE_ACCOUNTS:
+    name: "删除账号"
+    description: "填写要删除的账号编号、邮箱、账号ID或别名，多个用英文逗号、换行或 @ 分隔。填写后手动运行“账号管理”脚本即可删除。"
+    default_value: ""
+
+  DELETE_ALL:
+    name: "清空全部账号"
+    description: "设为 true 后，手动运行“账号管理”脚本会清空全部账号。清空后建议立即改回 false。"
+    default_value: "false"
+    options:
+      - "false"
+      - "true"
+
+  SHOW_SENSITIVE:
+    name: "显示完整账号"
+    description: "false 时会对邮箱做脱敏显示；true 时显示完整邮箱/ID。"
+    default_value: "false"
+    options:
+      - "false"
+      - "true"
 
 scriptings:
   - http_request:
@@ -8,12 +35,26 @@ scriptings:
       match: '^https://api\.wetalkapp\.com/app/queryBalanceAndBonus'
       script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Wetalk/Wetalk_capture.js"
       timeout: 10
+      env:
+        SHOW_SENSITIVE: "false"
 
   - schedule:
       name: "WeTalk 签到任务"
-      cron: "0 */6 * * *"
+      cron: "5 */6 * * *"
       script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Wetalk/Wetalk_task.js"
       timeout: 120
+      env:
+        RUN_ACCOUNTS: ""
+
+  - generic:
+      name: "WeTalk 账号管理"
+      script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Wetalk/Wetalk_account_manger.js"
+      timeout: 30
+      env:
+        RUN_ACCOUNTS: ""
+        DELETE_ACCOUNTS: ""
+        DELETE_ALL: "false"
+        SHOW_SENSITIVE: "false"
 
 mitm:
   hostnames:
