@@ -5,10 +5,7 @@ function notify(ctx, title, body = '') {
   ctx.notify({
     title: scriptName,
     subtitle: title,
-    body,
-    action: body
-      ? { type: 'clipboard', text: body }
-      : undefined
+    body
   });
 }
 
@@ -39,7 +36,8 @@ function saveStore(ctx, store) {
 
 function splitEnvList(value) {
   return String(value || '')
-    .split(/[\n,@，\s]+/)
+    // 注意：这里不能用 @ 分隔，否则邮箱会被拆坏
+    .split(/[\n,，;；\s]+/)
     .map(s => s.trim())
     .filter(Boolean);
 }
@@ -48,7 +46,10 @@ function maskAccount(text, showSensitive) {
   const s = String(text || '');
 
   if (showSensitive) return s;
-  if (!s.includes('@')) return s.length > 12 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s;
+
+  if (!s.includes('@')) {
+    return s.length > 12 ? `${s.slice(0, 6)}…${s.slice(-4)}` : s;
+  }
 
   const [name, domain] = s.split('@');
   const maskedName = name.length <= 2
@@ -70,8 +71,18 @@ function formatAccountList(store, showSensitive) {
       ? new Date(acc.updatedAt).toLocaleString()
       : '未知时间';
 
-    return `${index + 1}. ${maskAccount(label, showSensitive)}\n   ID: ${maskAccount(id, showSensitive)}\n   更新时间: ${updated}`;
+    return [
+      `${index + 1}. ${maskAccount(label, showSensitive)}`,
+      `   ID: ${maskAccount(id, showSensitive)}`,
+      `   Email: ${maskAccount(acc.email || '', showSensitive)}`,
+      `   Alias: ${maskAccount(acc.alias || '', showSensitive)}`,
+      `   更新时间: ${updated}`
+    ].join('\n');
   }).join('\n\n');
+}
+
+function normalizeText(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
 function matchAccountIds(store, tokens) {
@@ -79,25 +90,30 @@ function matchAccountIds(store, tokens) {
   const ids = (store.order || []).filter(id => store.accounts[id]);
 
   for (const tokenRaw of tokens) {
-    const token = String(tokenRaw).trim().toLowerCase();
+    const token = normalizeText(tokenRaw);
 
     if (!token) continue;
 
-    const index = Number(token);
-
-    if (Number.isInteger(index) && index >= 1 && index <= ids.length) {
-      result.add(ids[index - 1]);
-      continue;
+    // 支持按编号删除：1、2、3
+    if (/^\d+$/.test(token)) {
+      const index = Number(token);
+      if (index >= 1 && index <= ids.length) {
+        result.add(ids[index - 1]);
+        continue;
+      }
     }
 
     for (const id of ids) {
       const acc = store.accounts[id];
+
       const candidates = [
         id,
         acc.id,
         acc.email,
         acc.alias
-      ].filter(Boolean).map(v => String(v).trim().toLowerCase());
+      ]
+        .filter(Boolean)
+        .map(v => normalizeText(v));
 
       if (candidates.includes(token)) {
         result.add(id);
@@ -126,7 +142,7 @@ export default async function(ctx) {
     notify(
       ctx,
       '已清空全部账号',
-      `已删除 ${count} 个账号。\n\n请回到模块设置页，把 DELETE_ALL 改回 false，避免下次误删。`
+      `已删除 ${count} 个账号。\n\n请把 DELETE_ALL 改回 false，避免下次误删。`
     );
     return;
   }
@@ -138,7 +154,14 @@ export default async function(ctx) {
       notify(
         ctx,
         '未匹配到要删除的账号',
-        `输入内容：${deleteTokens.join(', ')}\n\n当前账号：\n${formatAccountList(store, showSensitive)}`
+        [
+          `DELETE_ACCOUNTS 当前输入：${deleteTokens.join(', ')}`,
+          '',
+          '当前账号列表：',
+          formatAccountList(store, showSensitive),
+          '',
+          '建议：优先填编号，例如 1 或 2。'
+        ].join('\n')
       );
       return;
     }
@@ -158,7 +181,14 @@ export default async function(ctx) {
     notify(
       ctx,
       '账号已删除',
-      `已删除：\n${deleted.map(x => `- ${maskAccount(x, showSensitive)}`).join('\n')}\n\n剩余账号：${store.order.length}\n\n${formatAccountList(store, showSensitive)}`
+      [
+        '已删除：',
+        ...deleted.map(x => `- ${maskAccount(x, showSensitive)}`),
+        '',
+        `剩余账号：${store.order.length}`,
+        '',
+        formatAccountList(store, showSensitive)
+      ].join('\n')
     );
     return;
   }
@@ -166,6 +196,14 @@ export default async function(ctx) {
   notify(
     ctx,
     `当前账号：${store.order.length} 个`,
-    `${formatAccountList(store, showSensitive)}\n\n删除方法：在模块设置页 DELETE_ACCOUNTS 填编号/邮箱/ID，然后手动运行本脚本。`
+    [
+      formatAccountList(store, showSensitive),
+      '',
+      '删除方法：',
+      '1. 在模块设置页 DELETE_ACCOUNTS 填编号，例如 1',
+      '2. 手动运行 “WeTalk 账号管理”',
+      '',
+      '如果要用邮箱删除，请不要用 @ 作为多个账号分隔符；多个账号请用英文逗号或换行。'
+    ].join('\n')
   );
 }
