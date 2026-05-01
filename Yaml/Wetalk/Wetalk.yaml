@@ -44,7 +44,7 @@ scriptings:
       timeout: 30
       env:
         RUN_ACCOUNTS: ""
-        DELETE_ACCOUNTS: ""
+        DELETE_ACCOUNTS: "2"
         DELETE_ALL: "false"
         SHOW_SENSITIVE: "false"
 
