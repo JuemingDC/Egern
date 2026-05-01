@@ -1,0 +1,370 @@
+export default async function(ctx) {
+  const env = ctx.env || {};
+  const family = ctx.widgetFamily || "systemMedium";
+  const isSmall = family === "systemSmall";
+  const isMedium = family === "systemMedium";
+  const isLarge = family === "systemLarge" || family === "systemExtraLarge";
+  const compact = isSmall || isMedium;
+
+  function parseDate(input) {
+    if (!input) return null;
+    const text = String(input).trim().replace(/\//g, "-").replace(/\./g, "-");
+    const m = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (m) {
+      const y = Number(m[1]);
+      const mo = Number(m[2]) - 1;
+      const d = Number(m[3]);
+      const dt = new Date(y, mo, d);
+      return isNaN(dt.getTime()) ? null : dt;
+    }
+    const dt = new Date(text);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+
+  function startOfDay(dt) {
+    return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  }
+
+  function getDayDiff(target) {
+    if (!target) return null;
+    const today = startOfDay(new Date());
+    const targetDay = startOfDay(target);
+    return Math.round((targetDay.getTime() - today.getTime()) / 86400000);
+  }
+
+  function isExpiredAfterToday(target) {
+    if (!target) return false;
+    return getDayDiff(target) < 0;
+  }
+
+  function isToday(target) {
+    if (!target) return false;
+    return getDayDiff(target) === 0;
+  }
+
+  function getDisplayValue(target) {
+    if (!target) {
+      return { type: "unknown", value: "--d" };
+    }
+    const diff = getDayDiff(target);
+    if (diff < 0) {
+      return null; // 次日起隐藏
+    }
+    if (diff === 0) {
+      return { type: "today", value: "TODAY" };
+    }
+    return { type: "countdown", value: `${diff}d`, days: diff };
+  }
+
+  function shortDate(dt) {
+    if (!dt) return "--.--";
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const d = String(dt.getDate()).padStart(2, "0");
+    return `${m}.${d}`;
+  }
+
+  function getItems() {
+    const list = [];
+
+    for (let i = 1; i <= 20; i++) {
+      const name = env["NAME" + i];
+      const date = env["DATE" + i];
+      const detail = env["DETAIL" + i];
+
+      if (!name && !date && !detail) continue;
+
+      const dt = parseDate(date);
+      const display = getDisplayValue(dt);
+
+      if (dt && display === null) continue;
+
+      list.push({
+        name: name || `Target ${i}`,
+        detail: detail || "",
+        date: dt,
+        shortDate: shortDate(dt),
+        display: display,
+        isToday: isToday(dt),
+        daysForTone: display && display.type === "countdown" ? display.days : (display && display.type === "today" ? 0 : null)
+      });
+    }
+
+    if (list.length === 0 && (env.NAME || env.DATE || env.DETAIL)) {
+      const dt = parseDate(env.DATE);
+      const display = getDisplayValue(dt);
+
+      if (!(dt && display === null)) {
+        list.push({
+          name: env.NAME || "Target",
+          detail: env.DETAIL || "",
+          date: dt,
+          shortDate: shortDate(dt),
+          display: display,
+          isToday: isToday(dt),
+          daysForTone: display && display.type === "countdown" ? display.days : (display && display.type === "today" ? 0 : null)
+        });
+      }
+    }
+
+    list.sort((a, b) => {
+      const ad = a.date ? startOfDay(a.date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bd = b.date ? startOfDay(b.date).getTime() : Number.MAX_SAFE_INTEGER;
+      return ad - bd;
+    });
+
+    return list;
+  }
+
+  function maxCountForFamily() {
+    if (family === "systemSmall") return 1;
+    if (family === "systemMedium") return 2;
+    if (family === "systemLarge") return 4;
+    if (family === "systemExtraLarge") return 6;
+    return 2;
+  }
+
+  function tone(days) {
+    if (days === null) {
+      return {
+        title: { light: "#231D18", dark: "#F4E8DC" },
+        detail: { light: "#8A7C6D", dark: "#B8A998" },
+        date: { light: "#8F8172", dark: "#C9B8A7" },
+        strong: { light: "#8E8174", dark: "#D7C5B3" },
+        divider: { light: "#D8CCBE", dark: "#51473D" }
+      };
+    }
+
+    if (days <= 3) {
+      return {
+        title: { light: "#231D18", dark: "#F4E8DC" },
+        detail: { light: "#966B64", dark: "#D0A59C" },
+        date: { light: "#A55E52", dark: "#E7B4AA" },
+        strong: { light: "#C95A4B", dark: "#F1A79B" },
+        divider: { light: "#E4B9AE", dark: "#6A4038" }
+      };
+    }
+
+    if (days <= 14) {
+      return {
+        title: { light: "#231D18", dark: "#F4E8DC" },
+        detail: { light: "#8B7861", dark: "#C8B391" },
+        date: { light: "#92703E", dark: "#E4C58C" },
+        strong: { light: "#C18A38", dark: "#E6C27F" },
+        divider: { light: "#DFC9A6", dark: "#655038" }
+      };
+    }
+
+    if (days <= 30) {
+      return {
+        title: { light: "#231D18", dark: "#F4E8DC" },
+        detail: { light: "#7C808A", dark: "#AEB7C4" },
+        date: { light: "#6C7D97", dark: "#B7C5D7" },
+        strong: { light: "#7E95B3", dark: "#C0CCDB" },
+        divider: { light: "#C8D3E2", dark: "#485466" }
+      };
+    }
+
+    return {
+      title: { light: "#231D18", dark: "#F4E8DC" },
+      detail: { light: "#8B9098", dark: "#AAB1BA" },
+      date: { light: "#7F8795", dark: "#BBC3CF" },
+      strong: { light: "#9AA3B1", dark: "#C6CDD7" },
+      divider: { light: "#D8DCE2", dark: "#474C55" }
+    };
+  }
+
+  function valueFont(item) {
+    if (item.display?.type === "today") {
+      return { size: compact ? "headline" : "title2", weight: "bold" };
+    }
+    return { size: compact ? "title2" : "largeTitle", weight: "bold" };
+  }
+
+  function itemBlock(item) {
+    const t = tone(item.daysForTone);
+    return {
+      type: "stack",
+      direction: "column",
+      flex: 1,
+      padding: compact ? [8, 0, 8, 0] : [10, 0, 10, 0],
+      children: [
+        { type: "spacer" },
+        {
+          type: "stack",
+          direction: "row",
+          alignItems: "center",
+          gap: compact ? 8 : 12,
+          children: [
+            {
+              type: "stack",
+              direction: "column",
+              flex: 1.6,
+              gap: 0,
+              children: [
+                {
+                  type: "text",
+                  text: item.name,
+                  font: { size: compact ? "headline" : "title3", weight: "bold" },
+                  textColor: t.title,
+                  textAlign: "left",
+                  maxLines: 1,
+                  minScale: 0.42
+                },
+                {
+                  type: "stack",
+                  direction: "row",
+                  alignItems: "center",
+                  children: [
+                    { type: "spacer" },
+                    {
+                      type: "text",
+                      text: item.detail || " ",
+                      font: { size: compact ? "caption1" : "footnote", weight: "regular" },
+                      textColor: t.detail,
+                      textAlign: "center",
+                      maxLines: 1,
+                      minScale: 0.55
+                    },
+                    { type: "spacer" }
+                  ]
+                }
+              ]
+            },
+            {
+              type: "stack",
+              direction: "column",
+              flex: 0.95,
+              alignItems: "end",
+              gap: 0,
+              children: [
+                {
+                  type: "text",
+                  text: item.shortDate,
+                  font: { size: compact ? "caption1" : "footnote", weight: "medium" },
+                  textColor: t.date,
+                  textAlign: "right",
+                  maxLines: 1,
+                  minScale: 0.6
+                },
+                {
+                  type: "text",
+                  text: item.display ? item.display.value : "--d",
+                  font: valueFont(item),
+                  textColor: t.strong,
+                  textAlign: "right",
+                  maxLines: 1,
+                  minScale: 0.5
+                }
+              ]
+            }
+          ]
+        },
+        { type: "spacer" }
+      ]
+    };
+  }
+
+  const items = getItems().slice(0, maxCountForFamily());
+
+  if (items.length === 0) {
+    return {
+      type: "widget",
+      padding: compact ? 12 : 14,
+      gap: 8,
+      backgroundGradient: {
+        type: "linear",
+        colors: [
+          { light: "#F4EDE2", dark: "#2A231C" },
+          { light: "#E8DCCE", dark: "#1D1813" }
+        ],
+        stops: [0, 1],
+        startPoint: { x: 0, y: 0 },
+        endPoint: { x: 1, y: 1 }
+      },
+      children: [
+        {
+          type: "stack",
+          direction: "row",
+          children: [
+            {
+              type: "text",
+              text: "COUNTDOWN",
+              font: { size: "caption2", weight: "semibold" },
+              textColor: { light: "#9B8E7F", dark: "#AFA08F" }
+            },
+            { type: "spacer" }
+          ]
+        },
+        { type: "spacer" },
+        {
+          type: "text",
+          text: "No target configured",
+          font: { size: "headline", weight: "semibold" },
+          textColor: { light: "#302821", dark: "#F0E5D9" },
+          textAlign: "center",
+          maxLines: 1,
+          minScale: 0.7
+        },
+        {
+          type: "text",
+          text: "Use NAME1 / DATE1 / DETAIL1",
+          font: { size: "caption1", weight: "regular" },
+          textColor: { light: "#7B6E61", dark: "#B6A899" },
+          textAlign: "center",
+          maxLines: 2
+        },
+        { type: "spacer" }
+      ]
+    };
+  }
+
+  const children = [
+    {
+      type: "stack",
+      direction: "row",
+      children: [
+        {
+          type: "text",
+          text: "COUNTDOWN",
+          font: { size: "caption2", weight: "semibold" },
+          textColor: { light: "#9B8E7F", dark: "#AFA08F" }
+        },
+        { type: "spacer" },
+        {
+          type: "text",
+          text: `${items.length} ITEMS`,
+          font: { size: "caption2", weight: "medium" },
+          textColor: { light: "#A09081", dark: "#AD9D8D" }
+        }
+      ]
+    }
+  ];
+
+  for (let i = 0; i < items.length; i++) {
+    children.push(itemBlock(items[i]));
+    if (i !== items.length - 1) {
+      children.push({
+        type: "stack",
+        height: 1,
+        backgroundColor: tone(items[i].daysForTone).divider
+      });
+    }
+  }
+
+  return {
+    type: "widget",
+    padding: compact ? 12 : 14,
+    gap: compact ? 2 : 4,
+    backgroundGradient: {
+      type: "linear",
+      colors: [
+        { light: "#F4EDE2", dark: "#2A231C" },
+        { light: "#E8DCCE", dark: "#1D1813" }
+      ],
+      stops: [0, 1],
+      startPoint: { x: 0, y: 0 },
+      endPoint: { x: 1, y: 1 }
+    },
+    children: children
+  };
+}
