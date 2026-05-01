@@ -236,7 +236,55 @@ async function runAccount(ctx, acc, index, total) {
 
 export default async function(ctx) {
   const store = loadStore(ctx);
-  const ids = (store.order || []).filter(id => store.accounts?.[id]?.capture?.paramsRaw);
+  function splitEnvList(value) {
+  return String(value || '')
+    .split(/[\n,@，\s]+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+function matchAccountIds(store, tokens) {
+  const allIds = (store.order || []).filter(id => store.accounts?.[id]?.capture?.paramsRaw);
+
+  if (!tokens.length) return allIds;
+
+  const result = new Set();
+
+  for (const tokenRaw of tokens) {
+    const token = String(tokenRaw).trim().toLowerCase();
+
+    if (!token) continue;
+
+    const index = Number(token);
+
+    // 支持按编号选择账号：1、2、3...
+    if (Number.isInteger(index) && index >= 1 && index <= allIds.length) {
+      result.add(allIds[index - 1]);
+      continue;
+    }
+
+    // 支持按 id / email / alias 匹配
+    for (const id of allIds) {
+      const acc = store.accounts[id];
+
+      const candidates = [
+        id,
+        acc.id,
+        acc.email,
+        acc.alias
+      ].filter(Boolean).map(v => String(v).trim().toLowerCase());
+
+      if (candidates.includes(token)) {
+        result.add(id);
+      }
+    }
+  }
+
+  return [...result];
+}
+
+const runTokens = splitEnvList(ctx.env?.RUN_ACCOUNTS || '');
+const ids = matchAccountIds(store, runTokens);
 
   if (!ids.length) {
     notify(ctx, '未抓到任何账号', '请先启用 MitM，打开 WeTalk 并触发 queryBalanceAndBonus 请求。');
