@@ -1,0 +1,21 @@
+name: "PingMe 签到"
+description: "获取 PingMe 签到参数并定时执行签到"
+author: "zenmefeishi, converted for Egern"
+
+scriptings:
+  - http_request:
+      name: "PingMe 获取签到参数"
+      match: '^https://api\.pingmeapp\.net/app/queryBalanceAndBonus'
+      script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Pingme/Pingme_capture.js"
+      timeout: 60
+
+  - schedule:
+      name: "PingMe 签到"
+      cron: "5 */8 * * *"
+      script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Pingme/Pingme_task.js"
+      timeout: 300
+      update_interval: 0
+
+mitm:
+  hostnames:
+    - "api.pingmeapp.net"
