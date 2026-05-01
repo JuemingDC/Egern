@@ -27,6 +27,7 @@ scriptings:
       match: '^https://api\.wetalkapp\.com/app/queryBalanceAndBonus'
       script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Wetalk/Wetalk_capture.js"
       timeout: 10
+      update_interval: 0
       env:
         SHOW_SENSITIVE: "false"
 
@@ -35,6 +36,7 @@ scriptings:
       cron: "5 */6 * * *"
       script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Wetalk/Wetalk_task.js"
       timeout: 120
+      update_interval: 0
       env:
         RUN_ACCOUNTS: ""
 
@@ -42,11 +44,8 @@ scriptings:
       name: "WeTalk 账号管理"
       script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Wetalk/Wetalk_account_manger.js"
       timeout: 30
-      env:
-        RUN_ACCOUNTS: ""
-        DELETE_ACCOUNTS: "2"
-        DELETE_ALL: "false"
-        SHOW_SENSITIVE: "false"
+      update_interval: 0
+      
 
 mitm:
   hostnames:
