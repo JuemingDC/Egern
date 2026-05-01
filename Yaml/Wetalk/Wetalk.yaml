@@ -9,9 +9,9 @@ env_schema:
     default_value: ""
 
   DELETE_ACCOUNTS:
-    name: "删除账号"
-    description: "填写要删除的账号编号、邮箱、账号ID或别名，多个用英文逗号、换行或 @ 分隔。填写后手动运行“账号管理”脚本即可删除。"
-    default_value: ""
+  name: "删除账号"
+  description: "填写要删除的账号编号、邮箱、账号ID或别名，多个用英文逗号、中文逗号、分号或换行分隔。推荐直接填编号，例如 1。"
+  default_value: ""
 
   DELETE_ALL:
     name: "清空全部账号"
