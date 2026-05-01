@@ -1,4 +1,4 @@
-const FORCE_DELETE_ACCOUNTS = "2"; 
+const FORCE_DELETE_ACCOUNTS = ""; 
 // ↑ 先填 "2" 测试删除第 2 个账号；删除成功后务必改回 ""
 
 const FORCE_DELETE_ALL = false;
