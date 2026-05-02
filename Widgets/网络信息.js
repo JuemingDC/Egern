@@ -7,7 +7,9 @@
  * - 使用全宽对列表格：左侧本地网络，右侧代理出口
  * - 每一行左右字段严格对应
  * - 字号统一，IP 与核心字段保持可读
- * - 底部流媒体 / AI 解锁扩大显示，完整应用名 + 红绿状态
+ * - 底部流媒体 / AI 解锁完整显示应用名
+ * - 解锁成功 / 部分解锁：绿色应用名
+ * - 解锁失败：红色应用名
  *
  * 中号布局：
  * - 保留紧凑双列结构
@@ -487,20 +489,11 @@ export default async function (ctx) {
   const parseUnlock = (res) => {
     if (res === "❌") {
       return {
-        text: "失败",
         color: C.red,
       };
     }
 
-    if (res === "🍿") {
-      return {
-        text: "部分",
-        color: C.green,
-      };
-    }
-
     return {
-      text: "成功",
       color: C.green,
     };
   };
@@ -623,15 +616,6 @@ export default async function (ctx) {
     ],
   });
 
-  const StatusDot = (color) => ({
-    type: "stack",
-    width: 8,
-    height: 8,
-    borderRadius: 99,
-    backgroundColor: color,
-    children: [],
-  });
-
   const UnlockChip = (name, res) => {
     const u = parseUnlock(res);
 
@@ -639,7 +623,6 @@ export default async function (ctx) {
       type: "stack",
       direction: "row",
       alignItems: "center",
-      gap: 6,
       flex: 1,
       padding: [6, 8, 6, 8],
       backgroundColor: C.softBg,
@@ -649,19 +632,11 @@ export default async function (ctx) {
           type: "text",
           text: name,
           flex: 1,
-          font: { size: L.appName, weight: "semibold" },
-          textColor: C.text,
-          maxLines: 1,
-          minScale: 0.78,
-        },
-        StatusDot(u.color),
-        {
-          type: "text",
-          text: u.text,
-          font: { size: L.appStatus, weight: "bold" },
+          font: { size: L.appName, weight: "bold" },
           textColor: u.color,
           maxLines: 1,
-          minScale: 0.82,
+          minScale: 0.86,
+          textAlign: "center",
         },
       ],
     };
