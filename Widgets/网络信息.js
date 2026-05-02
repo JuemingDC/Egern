@@ -3,11 +3,12 @@
  * 🎨 Egern Widget DSL 文字网格排版版
  *
  * 大号布局：
+ * - 背景改为略带灰的奶油白色
  * - 去掉本地网络 / 代理出口的大外框
  * - 使用全宽对列表格：左侧本地网络，右侧代理出口
  * - 每一行左右字段严格对应
  * - 字号统一，IP 与核心字段保持可读
- * - 底部流媒体 / AI 解锁完整显示应用名
+ * - 底部流媒体 / AI 解锁仅显示完整应用名
  * - 解锁成功 / 部分解锁：绿色应用名
  * - 解锁失败：红色应用名
  *
@@ -19,63 +20,38 @@ export default async function (ctx) {
   const family = ctx.widgetFamily || "systemMedium";
   const isLarge = family === "systemLarge" || family === "systemExtraLarge";
 
-  const nowForTheme = new Date();
-  const currentHour = nowForTheme.getHours();
-  const isNightTheme = currentHour >= 17 || currentHour < 5;
-
   const refreshAfter = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
   const C = {
-    bg: isNightTheme
-      ? { light: "#211A3D", dark: "#0B132B" }
-      : { light: "#FFF4CF", dark: "#6A4B16" },
+    bg: { light: "#F3F0E8", dark: "#F3F0E8" },
 
-    text: isNightTheme
-      ? { light: "#F7F2FF", dark: "#EAF0FF" }
-      : { light: "#3A2808", dark: "#FFF7D6" },
+    text: { light: "#2F2B24", dark: "#2F2B24" },
 
-    dim: isNightTheme
-      ? { light: "#B9B1D8", dark: "#9EABC9" }
-      : { light: "#8A6B25", dark: "#E5C981" },
+    dim: { light: "#7A7166", dark: "#7A7166" },
 
-    muted: isNightTheme
-      ? { light: "#D2CAE8", dark: "#B7C1DA" }
-      : { light: "#735817", dark: "#D8C17A" },
+    muted: { light: "#8B8174", dark: "#8B8174" },
 
-    divider: isNightTheme
-      ? { light: "#FFFFFF24", dark: "#FFFFFF18" }
-      : { light: "#6A4B1622", dark: "#FFF4CF26" },
+    divider: { light: "#D6CEC1", dark: "#D6CEC1" },
 
-    softBg: isNightTheme
-      ? { light: "#FFFFFF12", dark: "#FFFFFF0D" }
-      : { light: "#FFFFFF34", dark: "#FFF4CF1A" },
+    softBg: { light: "#E9E3D8", dark: "#E9E3D8" },
 
-    cpu: isNightTheme
-      ? { light: "#8FA7FF", dark: "#89B4FA" }
-      : { light: "#B7791F", dark: "#F6C85F" },
+    cpu: { light: "#9B6A22", dark: "#9B6A22" },
 
-    mem: isNightTheme
-      ? { light: "#C4A7E7", dark: "#CBA6F7" }
-      : { light: "#D69E2E", dark: "#FFE08A" },
+    mem: { light: "#7B5FA8", dark: "#7B5FA8" },
 
-    green: isNightTheme
-      ? { light: "#7FD6A4", dark: "#A6E3A1" }
-      : { light: "#238C55", dark: "#B7E4A8" },
+    green: { light: "#238C55", dark: "#238C55" },
 
-    red: isNightTheme
-      ? { light: "#F38BA8", dark: "#F38BA8" }
-      : { light: "#C24135", dark: "#FF8A80" },
+    red: { light: "#C24135", dark: "#C24135" },
 
-    orange: isNightTheme
-      ? { light: "#F6C177", dark: "#FAB387" }
-      : { light: "#B45309", dark: "#FFB454" },
+    orange: { light: "#B45309", dark: "#B45309" },
   };
 
   const L = getLayout(family);
 
-  const TIME_COL = isNightTheme
-    ? { light: "rgba(247,242,255,0.48)", dark: "rgba(234,240,255,0.46)" }
-    : { light: "rgba(58,40,8,0.42)", dark: "rgba(255,247,214,0.46)" };
+  const TIME_COL = {
+    light: "rgba(47,43,36,0.45)",
+    dark: "rgba(47,43,36,0.45)",
+  };
 
   function getLayout(family) {
     const large = family === "systemLarge" || family === "systemExtraLarge";
@@ -96,14 +72,13 @@ export default async function (ctx) {
       tableValueStrong: large ? 15 : 10,
 
       unlockTitle: large ? 12 : 10,
-      appName: large ? 13 : 10,
-      appStatus: large ? 13 : 10,
+      appName: large ? 14 : 10,
 
       mediumRowIcon: 11,
 
       tableGap: large ? 7 : 4,
       tableRowGap: large ? 10 : 8,
-      unlockGap: large ? 8 : 5,
+      unlockGap: large ? 18 : 5,
       unlockRowGap: large ? 8 : 5,
     };
   }
@@ -487,14 +462,8 @@ export default async function (ctx) {
   }
 
   const parseUnlock = (res) => {
-    if (res === "❌") {
-      return {
-        color: C.red,
-      };
-    }
-
     return {
-      color: C.green,
+      color: res === "❌" ? C.red : C.green,
     };
   };
 
@@ -605,7 +574,15 @@ export default async function (ctx) {
     ],
   });
 
-  const InfoRow = (leftLabel, leftValue, rightLabel, rightValue, leftColor = C.text, rightColor = C.text, strong = false) => ({
+  const InfoRow = (
+    leftLabel,
+    leftValue,
+    rightLabel,
+    rightValue,
+    leftColor = C.text,
+    rightColor = C.text,
+    strong = false
+  ) => ({
     type: "stack",
     direction: "row",
     alignItems: "center",
@@ -616,29 +593,17 @@ export default async function (ctx) {
     ],
   });
 
-  const UnlockChip = (name, res) => {
+  const UnlockText = (name, res) => {
     const u = parseUnlock(res);
 
     return {
-      type: "stack",
-      direction: "row",
-      alignItems: "center",
+      type: "text",
+      text: name,
       flex: 1,
-      padding: [6, 8, 6, 8],
-      backgroundColor: C.softBg,
-      borderRadius: 10,
-      children: [
-        {
-          type: "text",
-          text: name,
-          flex: 1,
-          font: { size: L.appName, weight: "bold" },
-          textColor: u.color,
-          maxLines: 1,
-          minScale: 0.86,
-          textAlign: "center",
-        },
-      ],
+      font: { size: L.appName, weight: "bold" },
+      textColor: u.color,
+      maxLines: 1,
+      minScale: 0.78,
     };
   };
 
@@ -646,7 +611,7 @@ export default async function (ctx) {
     type: "stack",
     direction: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
     children: [
       {
         type: "text",
@@ -773,15 +738,15 @@ export default async function (ctx) {
           gap: L.unlockRowGap,
           children: [
             UnlockRow("流媒体", [
-              UnlockChip("Netflix", rNF),
-              UnlockChip("Disney+", rDP),
-              UnlockChip("TikTok", rTK),
+              UnlockText("Netflix", rNF),
+              UnlockText("Disney+", rDP),
+              UnlockText("TikTok", rTK),
             ]),
 
             UnlockRow("AI 解锁", [
-              UnlockChip("ChatGPT", rGPT),
-              UnlockChip("Claude", rCL),
-              UnlockChip("Gemini", rGM),
+              UnlockText("ChatGPT", rGPT),
+              UnlockText("Claude", rCL),
+              UnlockText("Gemini", rGM),
             ]),
           ],
         },
