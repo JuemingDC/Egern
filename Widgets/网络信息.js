@@ -1,13 +1,12 @@
 /**
  * 📌 桌面小组件: 🛡️ 网络诊断雷达
- * 🎨 Egern Widget DSL 优化版
+ * 🎨 Egern Widget DSL 网格重排版
  *
- * 设计重点：
- * - 大号组件：去掉本地网络 / 代理出口 / 解锁区域的大外框
- * - 本地网络与代理出口改为文本对齐式排布，占用更多空间
- * - IP、落地、厂商、纯净等核心信息放大
- * - 解锁信息仅保留完整应用名称 + 绿色/红色状态
- * - 中号组件维持原紧凑信息结构
+ * 大号布局逻辑：
+ * - 12 × 18 逻辑网格
+ * - 本地网络 / 代理出口约占 60%+ 面积
+ * - 解锁信息仅保留完整应用名 + 红绿状态
+ * - 去掉所有大外框，以文本对齐和分割线组织信息
  */
 
 export default async function (ctx) {
@@ -41,20 +40,12 @@ export default async function (ctx) {
       ? { light: "#FFFFFF22", dark: "#FFFFFF16" }
       : { light: "#6A4B1620", dark: "#FFF4CF24" },
 
-    softBg: isNightTheme
-      ? { light: "#FFFFFF0D", dark: "#FFFFFF0A" }
-      : { light: "#FFFFFF28", dark: "#FFF4CF14" },
-
     cpu: isNightTheme
       ? { light: "#8FA7FF", dark: "#89B4FA" }
       : { light: "#B7791F", dark: "#F6C85F" },
 
     mem: isNightTheme
       ? { light: "#C4A7E7", dark: "#CBA6F7" }
-      : { light: "#D69E2E", dark: "#FFE08A" },
-
-    yellow: isNightTheme
-      ? { light: "#F6C177", dark: "#F9E2AF" }
       : { light: "#D69E2E", dark: "#FFE08A" },
 
     green: isNightTheme
@@ -76,6 +67,41 @@ export default async function (ctx) {
     ? { light: "rgba(247,242,255,0.48)", dark: "rgba(234,240,255,0.46)" }
     : { light: "rgba(58,40,8,0.42)", dark: "rgba(255,247,214,0.46)" };
 
+  function getLayout(family) {
+    const large = family === "systemLarge" || family === "systemExtraLarge";
+
+    return {
+      widgetPadding: large ? [9, 13, 9, 13] : 14,
+      rootGap: large ? 7 : 10,
+
+      headerTitle: large ? 10 : 13,
+      headerSub: large ? 9 : 10,
+      headerIcon: large ? 10 : 13,
+
+      sectionTitle: large ? 12 : 10,
+      sectionIcon: large ? 12 : 11,
+
+      ipLabel: large ? 10 : 10,
+      ipValue: large ? 18 : 10,
+
+      rowLabel: large ? 10 : 10,
+      rowValue: large ? 14 : 10,
+
+      unlockTitle: large ? 11 : 10,
+      appName: large ? 12 : 10,
+      appStatus: large ? 13 : 10,
+
+      mediumRowIcon: 11,
+
+      mainColumnGap: large ? 13 : 10,
+      columnGap: large ? 8 : 5,
+      ipGap: large ? 8 : 5,
+      infoGap: large ? 6 : 4,
+      unlockGap: large ? 8 : 5,
+      unlockRowGap: large ? 7 : 5,
+    };
+  }
+
   const fmtProxyISP = (isp) => {
     if (!isp) return "未知";
     const s = String(isp);
@@ -89,7 +115,7 @@ export default async function (ctx) {
     if (/alibaba|aliyun/i.test(s)) return "阿里云";
     if (/tencent/i.test(s)) return "腾讯云";
     if (/oracle/i.test(s)) return "Oracle Cloud";
-    return s.length > 20 ? s.slice(0, 20) + "…" : s;
+    return s.length > 22 ? s.slice(0, 22) + "…" : s;
   };
 
   const getFlag = (code) => {
@@ -430,7 +456,7 @@ export default async function (ctx) {
 
     if (res === "🍿") {
       return {
-        text: "仅原创",
+        text: "部分",
         color: C.green,
       };
     }
@@ -451,37 +477,19 @@ export default async function (ctx) {
   const textVideo = `${fmtUnlock("NF", rNF, proxyData.cc)}   ${fmtUnlock("DP", rDP, proxyData.cc)}   ${fmtUnlock("TK", rTK, proxyData.cc)}`;
   const textAI = `${fmtUnlock("GPT", rGPT, proxyData.cc)}   ${fmtUnlock("CL", rCL, proxyData.cc)}   ${fmtUnlock("GM", rGM, proxyData.cc)}`;
 
-  function getLayout(family) {
-    const large = family === "systemLarge" || family === "systemExtraLarge";
+  const ThinDivider = () => ({
+    type: "stack",
+    height: 0.6,
+    backgroundColor: C.divider,
+    children: [],
+  });
 
-    return {
-      widgetPadding: large ? [10, 13, 10, 13] : 14,
-      rootGap: large ? 8 : 10,
-
-      headerTitle: large ? 10 : 13,
-      headerSub: large ? 9 : 10,
-      headerIcon: large ? 10 : 13,
-
-      sectionTitle: large ? 12 : 10,
-      sectionIcon: large ? 12 : 11,
-
-      ipLabel: large ? 10 : 10,
-      ipValue: large ? 17 : 10,
-      rowLabel: large ? 10 : 10,
-      rowValue: large ? 13 : 10,
-
-      unlockTitle: large ? 11 : 10,
-      appName: large ? 12 : 10,
-      appStatus: large ? 13 : 10,
-
-      mediumRowIcon: 11,
-
-      localProxyGap: large ? 12 : 10,
-      lineGap: large ? 5 : 4,
-      blockGap: large ? 8 : 5,
-      unlockGap: large ? 7 : 5,
-    };
-  }
+  const VerticalDivider = () => ({
+    type: "stack",
+    width: 0.6,
+    backgroundColor: C.divider,
+    children: [],
+  });
 
   const SectionHeader = (icon, title, color) => ({
     type: "stack",
@@ -506,20 +514,6 @@ export default async function (ctx) {
     ],
   });
 
-  const ThinDivider = () => ({
-    type: "stack",
-    height: 0.6,
-    backgroundColor: C.divider,
-    children: [],
-  });
-
-  const VerticalDivider = () => ({
-    type: "stack",
-    width: 0.6,
-    backgroundColor: C.divider,
-    children: [],
-  });
-
   const IpBlock = (label, value, color = C.text) => ({
     type: "stack",
     direction: "column",
@@ -535,10 +529,10 @@ export default async function (ctx) {
       {
         type: "text",
         text: value,
-        font: { size: L.ipValue, weight: "bold", family: "Menlo" },
+        font: { size: L.ipValue, weight: "bold" },
         textColor: color,
         maxLines: 1,
-        minScale: 0.78,
+        minScale: 0.74,
       },
     ],
   });
@@ -564,7 +558,7 @@ export default async function (ctx) {
         font: { size: L.rowValue, weight: "semibold" },
         textColor: color,
         maxLines: 1,
-        minScale: 0.76,
+        minScale: 0.72,
       },
     ],
   });
@@ -572,21 +566,21 @@ export default async function (ctx) {
   const DataColumn = (titleIcon, title, color, ipBlocks, lines) => ({
     type: "stack",
     direction: "column",
-    gap: L.blockGap,
+    gap: L.columnGap,
     flex: 1,
     children: [
       SectionHeader(titleIcon, title, color),
       {
         type: "stack",
         direction: "column",
-        gap: 6,
+        gap: L.ipGap,
         children: ipBlocks,
       },
       ThinDivider(),
       {
         type: "stack",
         direction: "column",
-        gap: L.lineGap,
+        gap: L.infoGap,
         children: lines,
       },
     ],
@@ -603,52 +597,46 @@ export default async function (ctx) {
 
   const UnlockItem = (name, res) => {
     const u = parseUnlock(res);
+
     return {
       type: "stack",
-      direction: "column",
-      gap: 2,
+      direction: "row",
+      alignItems: "center",
+      gap: 5,
       flex: 1,
       children: [
         {
           type: "text",
           text: name,
+          flex: 1,
           font: { size: L.appName, weight: "semibold" },
           textColor: C.text,
           maxLines: 1,
           minScale: 0.82,
-          textAlign: "center",
         },
+        StatusDot(u.color),
         {
-          type: "stack",
-          direction: "row",
-          alignItems: "center",
-          gap: 4,
-          children: [
-            { type: "spacer" },
-            StatusDot(u.color),
-            {
-              type: "text",
-              text: u.text,
-              font: { size: L.appStatus, weight: "bold" },
-              textColor: u.color,
-              maxLines: 1,
-              minScale: 0.82,
-            },
-            { type: "spacer" },
-          ],
+          type: "text",
+          text: u.text,
+          font: { size: L.appStatus, weight: "bold" },
+          textColor: u.color,
+          maxLines: 1,
+          minScale: 0.82,
         },
       ],
     };
   };
 
-  const UnlockSection = (title, children) => ({
+  const UnlockRow = (title, items) => ({
     type: "stack",
-    direction: "column",
-    gap: 5,
+    direction: "row",
+    alignItems: "center",
+    gap: 8,
     children: [
       {
         type: "text",
         text: title,
+        width: 58,
         font: { size: L.unlockTitle, weight: "semibold" },
         textColor: C.dim,
         maxLines: 1,
@@ -657,7 +645,8 @@ export default async function (ctx) {
         type: "stack",
         direction: "row",
         gap: L.unlockGap,
-        children,
+        flex: 1,
+        children: items,
       },
     ],
   });
@@ -744,7 +733,8 @@ export default async function (ctx) {
         {
           type: "stack",
           direction: "row",
-          gap: L.localProxyGap,
+          gap: L.mainColumnGap,
+          flex: 1,
           children: [
             DataColumn(
               netIcon,
@@ -784,17 +774,23 @@ export default async function (ctx) {
 
         ThinDivider(),
 
-        UnlockSection("流媒体解锁", [
-          UnlockItem("Netflix", rNF),
-          UnlockItem("Disney+", rDP),
-          UnlockItem("TikTok", rTK),
-        ]),
-
-        UnlockSection("AI 解锁", [
-          UnlockItem("ChatGPT", rGPT),
-          UnlockItem("Claude", rCL),
-          UnlockItem("Gemini", rGM),
-        ]),
+        {
+          type: "stack",
+          direction: "column",
+          gap: L.unlockRowGap,
+          children: [
+            UnlockRow("流媒体", [
+              UnlockItem("Netflix", rNF),
+              UnlockItem("Disney+", rDP),
+              UnlockItem("TikTok", rTK),
+            ]),
+            UnlockRow("AI", [
+              UnlockItem("ChatGPT", rGPT),
+              UnlockItem("Claude", rCL),
+              UnlockItem("Gemini", rGM),
+            ]),
+          ],
+        },
       ],
     };
   }
