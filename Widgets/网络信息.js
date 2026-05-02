@@ -1,15 +1,16 @@
 /**
  * 📌 桌面小组件: 🛡️ 网络诊断雷达
- * 🎨 Egern Widget DSL 网格优化版
+ * 🎨 Egern Widget DSL 文字网格排版版
  *
  * 大号布局：
- * - 去掉本地网络 / 代理出口 / 解锁区域的大外框
- * - 本地网络与代理出口占主体面积
- * - 以对齐表格方式展示 IP、落地、厂商、纯净、延迟等核心信息
- * - 流媒体 / AI 解锁仅显示完整应用名称 + 红绿状态
+ * - 去掉本地网络 / 代理出口的大外框
+ * - 使用全宽对列表格：左侧本地网络，右侧代理出口
+ * - 每一行左右字段严格对应
+ * - 字号统一，IP 与核心字段保持可读
+ * - 底部流媒体 / AI 解锁扩大显示，完整应用名 + 红绿状态
  *
  * 中号布局：
- * - 保留原紧凑双列信息结构
+ * - 保留紧凑双列结构
  */
 
 export default async function (ctx) {
@@ -40,12 +41,12 @@ export default async function (ctx) {
       : { light: "#735817", dark: "#D8C17A" },
 
     divider: isNightTheme
-      ? { light: "#FFFFFF22", dark: "#FFFFFF16" }
-      : { light: "#6A4B1620", dark: "#FFF4CF24" },
+      ? { light: "#FFFFFF24", dark: "#FFFFFF18" }
+      : { light: "#6A4B1622", dark: "#FFF4CF26" },
 
     softBg: isNightTheme
-      ? { light: "#FFFFFF0D", dark: "#FFFFFF0A" }
-      : { light: "#FFFFFF2E", dark: "#FFF4CF18" },
+      ? { light: "#FFFFFF12", dark: "#FFFFFF0D" }
+      : { light: "#FFFFFF34", dark: "#FFF4CF1A" },
 
     cpu: isNightTheme
       ? { light: "#8FA7FF", dark: "#89B4FA" }
@@ -78,8 +79,8 @@ export default async function (ctx) {
     const large = family === "systemLarge" || family === "systemExtraLarge";
 
     return {
-      widgetPadding: large ? [9, 13, 9, 13] : 14,
-      rootGap: large ? 8 : 10,
+      widgetPadding: large ? [10, 13, 10, 13] : 14,
+      rootGap: large ? 9 : 10,
 
       headerTitle: large ? 10 : 13,
       headerSub: large ? 9 : 10,
@@ -88,24 +89,20 @@ export default async function (ctx) {
       sectionTitle: large ? 12 : 10,
       sectionIcon: large ? 12 : 11,
 
-      ipLabel: large ? 10 : 10,
-      ipValue: large ? 18 : 10,
+      tableLabel: large ? 11 : 10,
+      tableValue: large ? 14 : 10,
+      tableValueStrong: large ? 15 : 10,
 
-      rowLabel: large ? 10 : 10,
-      rowValue: large ? 14 : 10,
-
-      unlockTitle: large ? 11 : 10,
-      appName: large ? 12 : 10,
+      unlockTitle: large ? 12 : 10,
+      appName: large ? 13 : 10,
       appStatus: large ? 13 : 10,
 
       mediumRowIcon: 11,
 
-      panelGap: large ? 7 : 5,
-      mainColumnGap: large ? 12 : 10,
-      mainLineGap: large ? 5 : 4,
-      detailLineGap: large ? 5 : 4,
-      unlockGap: large ? 7 : 5,
-      unlockRowGap: large ? 7 : 5,
+      tableGap: large ? 7 : 4,
+      tableRowGap: large ? 10 : 8,
+      unlockGap: large ? 8 : 5,
+      unlockRowGap: large ? 8 : 5,
     };
   }
 
@@ -122,7 +119,7 @@ export default async function (ctx) {
     if (/alibaba|aliyun/i.test(s)) return "阿里云";
     if (/tencent/i.test(s)) return "腾讯云";
     if (/oracle/i.test(s)) return "Oracle Cloud";
-    return s.length > 22 ? s.slice(0, 22) + "…" : s;
+    return s.length > 24 ? s.slice(0, 24) + "…" : s;
   };
 
   const getFlag = (code) => {
@@ -159,6 +156,14 @@ export default async function (ctx) {
     }
 
     return "";
+  };
+
+  const getHeader = (headers, name) => {
+    if (!headers) return "";
+    if (typeof headers.get === "function") {
+      return headers.get(name) || headers.get(name.toLowerCase()) || "";
+    }
+    return headers[name] || headers[name.toLowerCase()] || "";
   };
 
   const d = ctx.device || {};
@@ -308,7 +313,7 @@ export default async function (ctx) {
 
       if (!res || res.status === 403) return "❌";
 
-      const loc = res.headers?.location || res.headers?.Location || "";
+      const loc = getHeader(res.headers, "location");
       if (loc.includes("unavailable")) return "❌";
 
       return "OK";
@@ -406,7 +411,7 @@ export default async function (ctx) {
 
       if (!res) return "❌";
 
-      const loc = res.headers?.location || res.headers?.Location || "";
+      const loc = getHeader(res.headers, "location");
       if (loc.includes("faq")) return "❌";
 
       return "OK";
@@ -522,47 +527,73 @@ export default async function (ctx) {
     children: [],
   });
 
-  const VerticalDivider = () => ({
-    type: "stack",
-    width: 0.6,
-    backgroundColor: C.divider,
-    children: [],
-  });
-
-  const SectionHeader = (icon, title, color) => ({
+  const SectionTitle = (icon, leftTitle, rightTitle) => ({
     type: "stack",
     direction: "row",
     alignItems: "center",
-    gap: 5,
+    gap: L.tableRowGap,
     children: [
       {
-        type: "image",
-        src: `sf-symbol:${icon}`,
-        color,
-        width: L.sectionIcon,
-        height: L.sectionIcon,
+        type: "stack",
+        direction: "row",
+        alignItems: "center",
+        gap: 5,
+        flex: 1,
+        children: [
+          {
+            type: "image",
+            src: `sf-symbol:${icon}`,
+            color: C.cpu,
+            width: L.sectionIcon,
+            height: L.sectionIcon,
+          },
+          {
+            type: "text",
+            text: leftTitle,
+            font: { size: L.sectionTitle, weight: "semibold" },
+            textColor: C.dim,
+            maxLines: 1,
+          },
+        ],
       },
       {
-        type: "text",
-        text: title,
-        font: { size: L.sectionTitle, weight: "semibold" },
-        textColor: C.dim,
-        maxLines: 1,
+        type: "stack",
+        direction: "row",
+        alignItems: "center",
+        gap: 5,
+        flex: 1,
+        children: [
+          {
+            type: "image",
+            src: "sf-symbol:paperplane.fill",
+            color: C.mem,
+            width: L.sectionIcon,
+            height: L.sectionIcon,
+          },
+          {
+            type: "text",
+            text: rightTitle,
+            font: { size: L.sectionTitle, weight: "semibold" },
+            textColor: C.dim,
+            maxLines: 1,
+          },
+        ],
       },
     ],
   });
 
-  const MainInfoLine = (label, value, color = C.text) => ({
+  const InfoCell = (label, value, color = C.text, strong = false) => ({
     type: "stack",
     direction: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+    flex: 1,
     children: [
       {
         type: "text",
         text: label,
-        width: 44,
-        font: { size: L.ipLabel, weight: "medium" },
+        width: 36,
+        font: { size: L.tableLabel, weight: "regular" },
         textColor: C.dim,
         maxLines: 1,
       },
@@ -570,7 +601,10 @@ export default async function (ctx) {
         type: "text",
         text: value,
         flex: 1,
-        font: { size: L.ipValue, weight: "bold" },
+        font: {
+          size: strong ? L.tableValueStrong : L.tableValue,
+          weight: strong ? "bold" : "semibold",
+        },
         textColor: color,
         maxLines: 1,
         minScale: 0.76,
@@ -578,59 +612,21 @@ export default async function (ctx) {
     ],
   });
 
-  const DetailLine = (label, value, color = C.text) => ({
+  const InfoRow = (leftLabel, leftValue, rightLabel, rightValue, leftColor = C.text, rightColor = C.text, strong = false) => ({
     type: "stack",
     direction: "row",
     alignItems: "center",
-    gap: 8,
+    gap: L.tableRowGap,
     children: [
-      {
-        type: "text",
-        text: label,
-        width: 44,
-        font: { size: L.rowLabel, weight: "regular" },
-        textColor: C.dim,
-        maxLines: 1,
-      },
-      {
-        type: "text",
-        text: value,
-        flex: 1,
-        font: { size: L.rowValue, weight: "semibold" },
-        textColor: color,
-        maxLines: 1,
-        minScale: 0.74,
-      },
-    ],
-  });
-
-  const DataPanel = (icon, title, color, mainLines, detailLines) => ({
-    type: "stack",
-    direction: "column",
-    gap: L.panelGap,
-    flex: 1,
-    children: [
-      SectionHeader(icon, title, color),
-      {
-        type: "stack",
-        direction: "column",
-        gap: L.mainLineGap,
-        children: mainLines,
-      },
-      ThinDivider(),
-      {
-        type: "stack",
-        direction: "column",
-        gap: L.detailLineGap,
-        children: detailLines,
-      },
+      InfoCell(leftLabel, leftValue, leftColor, strong),
+      InfoCell(rightLabel, rightValue, rightColor, strong),
     ],
   });
 
   const StatusDot = (color) => ({
     type: "stack",
-    width: 7,
-    height: 7,
+    width: 8,
+    height: 8,
     borderRadius: 99,
     backgroundColor: color,
     children: [],
@@ -643,11 +639,11 @@ export default async function (ctx) {
       type: "stack",
       direction: "row",
       alignItems: "center",
-      gap: 5,
+      gap: 6,
       flex: 1,
-      padding: [4, 7, 4, 7],
+      padding: [6, 8, 6, 8],
       backgroundColor: C.softBg,
-      borderRadius: 9,
+      borderRadius: 10,
       children: [
         {
           type: "text",
@@ -665,13 +661,13 @@ export default async function (ctx) {
           font: { size: L.appStatus, weight: "bold" },
           textColor: u.color,
           maxLines: 1,
-          minScale: 0.8,
+          minScale: 0.82,
         },
       ],
     };
   };
 
-  const UnlockBand = (title, items) => ({
+  const UnlockRow = (title, items) => ({
     type: "stack",
     direction: "row",
     alignItems: "center",
@@ -680,7 +676,7 @@ export default async function (ctx) {
       {
         type: "text",
         text: title,
-        width: 52,
+        width: 58,
         font: { size: L.unlockTitle, weight: "semibold" },
         textColor: C.dim,
         maxLines: 1,
@@ -776,43 +772,21 @@ export default async function (ctx) {
 
         {
           type: "stack",
-          direction: "row",
-          gap: L.mainColumnGap,
+          direction: "column",
+          gap: L.tableGap,
           flex: 1,
           children: [
-            DataPanel(
-              netIcon,
-              "本地网络",
-              C.cpu,
-              [
-                MainInfoLine("内网", localIp),
-                MainInfoLine("公网", localData.ip),
-              ],
-              [
-                DetailLine("环境", netName),
-                DetailLine("网关", gateway),
-                DetailLine("位置", localData.loc),
-                DetailLine("延迟", localDelay),
-              ]
-            ),
+            SectionTitle(netIcon, "本地网络", "代理出口"),
 
-            VerticalDivider(),
+            InfoRow("内网", localIp, "出口", proxyData.ip, C.text, C.text, true),
+            InfoRow("公网", localData.ip, "落地", proxyData.loc, C.text, C.text, true),
 
-            DataPanel(
-              "paperplane.fill",
-              "代理出口",
-              C.mem,
-              [
-                MainInfoLine("出口", proxyData.ip),
-                MainInfoLine("落地", proxyData.loc),
-              ],
-              [
-                DetailLine("厂商", proxyData.isp),
-                DetailLine("属性", nativeText, nativeCol),
-                DetailLine("纯净", riskTxt, riskCol),
-                DetailLine("延迟", proxyDelay),
-              ]
-            ),
+            ThinDivider(),
+
+            InfoRow("环境", netName, "厂商", proxyData.isp),
+            InfoRow("网关", gateway, "属性", nativeText, C.text, nativeCol),
+            InfoRow("位置", localData.loc, "纯净", riskTxt, C.text, riskCol),
+            InfoRow("延迟", localDelay, "延迟", proxyDelay),
           ],
         },
 
@@ -823,13 +797,13 @@ export default async function (ctx) {
           direction: "column",
           gap: L.unlockRowGap,
           children: [
-            UnlockBand("流媒体", [
+            UnlockRow("流媒体", [
               UnlockChip("Netflix", rNF),
               UnlockChip("Disney+", rDP),
               UnlockChip("TikTok", rTK),
             ]),
 
-            UnlockBand("AI", [
+            UnlockRow("AI 解锁", [
               UnlockChip("ChatGPT", rGPT),
               UnlockChip("Claude", rCL),
               UnlockChip("Gemini", rGM),
