@@ -16,14 +16,15 @@ export default async function (ctx) {
   }
 
   const family = ctx.widgetFamily || "systemMedium";
-  const style = getStyle(slots.length, family);
+  const visibleSlots = slots.slice(0, getDisplayLimit(family, slots.length));
+  const style = getStyle(visibleSlots.length, family);
   const refreshAfter = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
-  if (!slots.length) {
+  if (!visibleSlots.length) {
     return buildEmptyWidget(refreshAfter);
   }
 
-  const results = await Promise.all(slots.map((slot) => fetchInfo(ctx, slot)));
+  const results = await Promise.all(visibleSlots.map((slot) => fetchInfo(ctx, slot)));
 
   return {
     type: "widget",
@@ -453,10 +454,60 @@ function parseUserInfo(header) {
   return result;
 }
 
+function getDisplayLimit(family, count) {
+  if (family === "systemMedium") return Math.min(count, 2);
+  if (family === "systemLarge") return Math.min(count, 4);
+  return count;
+}
+
 function getStyle(count, family) {
   const compact = family === "systemSmall" || family === "accessoryRectangular";
+  const medium = family === "systemMedium";
+  const large = family === "systemLarge";
   const dense = count >= 5;
   const veryDense = count >= 7;
+
+  if (medium) {
+    return {
+      widgetPadding: [12, 14, 12, 14],
+      widgetGap: 6,
+      listGap: 8,
+      rowGap: 3,
+      dividerTop: 5,
+      headerFont: "caption1",
+      metaFont: "caption2",
+      nameFont: "subheadline",
+      infoFont: "caption2",
+      percentFont: "caption1",
+      nameGap: 6,
+      dotBox: 10,
+      dotSize: 5,
+      barGap: 2,
+      sheenHeight: 1,
+      barHeight: 5,
+    };
+  }
+
+  if (large) {
+    return {
+      widgetPadding: [14, 15, 14, 15],
+      widgetGap: 8,
+      listGap: 9,
+      rowGap: 4,
+      dividerTop: 6,
+      headerFont: "caption1",
+      metaFont: "caption1",
+      nameFont: "subheadline",
+      infoFont: "caption1",
+      percentFont: "caption1",
+      nameGap: 6,
+      dotBox: 10,
+      dotSize: 5,
+      barGap: 2,
+      sheenHeight: 2,
+      barHeight: 5,
+    };
+  }
 
   return {
     widgetPadding: compact ? [11, 12, 11, 12] : dense ? [12, 13, 12, 13] : [13, 14, 13, 14],
@@ -484,45 +535,47 @@ function getUsageTone(percent) {
       dotColor: { light: "#D1908A", dark: "#F1AAA3" },
       percentColor: { light: "#A56A64", dark: "#F3B8B0" },
       sheenColors: [
-        { light: "#FFF2F0", dark: "#FFB9A922" },
-        { light: "#F5D0C8", dark: "#FFAF9D55" },
-        { light: "#DFA096", dark: "#E8A29A88" },
+        { light: "#FFE9E5", dark: "#FFAA9A2A" },
+        { light: "#EFC2B9", dark: "#F59C8C66" },
+        { light: "#D38980", dark: "#D98D84AA" },
       ],
       barColors: [
-        { light: "#F8E3DF", dark: "#9E6C69" },
-        { light: "#E9C1B9", dark: "#C38C83" },
-        { light: "#D79A92", dark: "#E5A39B" },
+        { light: "#F0D4CF", dark: "#875B58" },
+        { light: "#E1B0A8", dark: "#B07870" },
+        { light: "#C9837B", dark: "#D68F87" },
       ],
     };
   }
+
   if (percent >= 70) {
     return {
       dotColor: { light: "#D3B07E", dark: "#E6C18A" },
       percentColor: { light: "#9A7A4B", dark: "#EEC88F" },
       sheenColors: [
-        { light: "#FFF7EB", dark: "#E6C18A22" },
-        { light: "#F3DAB2", dark: "#E2B56A55" },
-        { light: "#D9B27B", dark: "#DDAE72AA" },
+        { light: "#FFF2DE", dark: "#E6C18A2A" },
+        { light: "#EBCB9B", dark: "#D9A95D66" },
+        { light: "#CB9F67", dark: "#CC965AAA" },
       ],
       barColors: [
-        { light: "#F7EAD1", dark: "#937247" },
-        { light: "#EACB9A", dark: "#B98D54" },
-        { light: "#D9B27B", dark: "#DEAF71" },
+        { light: "#F2DFC0", dark: "#82653F" },
+        { light: "#DFB97F", dark: "#A77A45" },
+        { light: "#C9965A", dark: "#CA9657" },
       ],
     };
   }
+
   return {
     dotColor: { light: "#95AEC9", dark: "#A9C8E7" },
     percentColor: { light: "#6B7F96", dark: "#C6DCF3" },
     sheenColors: [
-      { light: "#F7FAFE", dark: "#7EA6CF18" },
-      { light: "#D8E6F4", dark: "#8AB6E033" },
-      { light: "#B8CFE6", dark: "#9FC1E899" },
+      { light: "#EEF6FE", dark: "#7EA6CF20" },
+      { light: "#CADBEB", dark: "#7EA9D244" },
+      { light: "#9FBFDC", dark: "#8DB2D699" },
     ],
     barColors: [
-      { light: "#EFF4FA", dark: "#526A84" },
-      { light: "#D4E0EC", dark: "#7694B1" },
-      { light: "#B9CFE5", dark: "#A5C3E2" },
+      { light: "#E5EEF7", dark: "#465D75" },
+      { light: "#C4D4E4", dark: "#6683A0" },
+      { light: "#98B7D4", dark: "#8DB2D6" },
     ],
   };
 }
