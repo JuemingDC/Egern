@@ -1,12 +1,15 @@
 /**
  * 📌 桌面小组件: 🛡️ 网络诊断雷达
- * 🎨 Egern Widget DSL 网格重排版
+ * 🎨 Egern Widget DSL 网格优化版
  *
- * 大号布局逻辑：
- * - 12 × 18 逻辑网格
- * - 本地网络 / 代理出口约占 60%+ 面积
- * - 解锁信息仅保留完整应用名 + 红绿状态
- * - 去掉所有大外框，以文本对齐和分割线组织信息
+ * 大号布局：
+ * - 去掉本地网络 / 代理出口 / 解锁区域的大外框
+ * - 本地网络与代理出口占主体面积
+ * - 以对齐表格方式展示 IP、落地、厂商、纯净、延迟等核心信息
+ * - 流媒体 / AI 解锁仅显示完整应用名称 + 红绿状态
+ *
+ * 中号布局：
+ * - 保留原紧凑双列信息结构
  */
 
 export default async function (ctx) {
@@ -40,6 +43,10 @@ export default async function (ctx) {
       ? { light: "#FFFFFF22", dark: "#FFFFFF16" }
       : { light: "#6A4B1620", dark: "#FFF4CF24" },
 
+    softBg: isNightTheme
+      ? { light: "#FFFFFF0D", dark: "#FFFFFF0A" }
+      : { light: "#FFFFFF2E", dark: "#FFF4CF18" },
+
     cpu: isNightTheme
       ? { light: "#8FA7FF", dark: "#89B4FA" }
       : { light: "#B7791F", dark: "#F6C85F" },
@@ -72,7 +79,7 @@ export default async function (ctx) {
 
     return {
       widgetPadding: large ? [9, 13, 9, 13] : 14,
-      rootGap: large ? 7 : 10,
+      rootGap: large ? 8 : 10,
 
       headerTitle: large ? 10 : 13,
       headerSub: large ? 9 : 10,
@@ -93,11 +100,11 @@ export default async function (ctx) {
 
       mediumRowIcon: 11,
 
-      mainColumnGap: large ? 13 : 10,
-      columnGap: large ? 8 : 5,
-      ipGap: large ? 8 : 5,
-      infoGap: large ? 6 : 4,
-      unlockGap: large ? 8 : 5,
+      panelGap: large ? 7 : 5,
+      mainColumnGap: large ? 12 : 10,
+      mainLineGap: large ? 5 : 4,
+      detailLineGap: large ? 5 : 4,
+      unlockGap: large ? 7 : 5,
       unlockRowGap: large ? 7 : 5,
     };
   }
@@ -121,9 +128,13 @@ export default async function (ctx) {
   const getFlag = (code) => {
     if (!code || String(code).toUpperCase() === "TW") return "🇨🇳";
     if (String(code).toUpperCase() === "XX" || code === "OK") return "✅";
+
     const cc = String(code).toUpperCase();
     if (cc.length !== 2) return "✅";
-    return String.fromCodePoint(...cc.split("").map((c) => 127397 + c.charCodeAt()));
+
+    return String.fromCodePoint(
+      ...cc.split("").map((c) => 127397 + c.charCodeAt())
+    );
   };
 
   const BASE_UA =
@@ -137,6 +148,7 @@ export default async function (ctx) {
   const readBody = async (r) => {
     if (!r) return "";
     if (typeof r.body === "string" && r.body.length) return r.body;
+
     if (typeof r.text === "function") {
       try {
         const t = await r.text();
@@ -145,6 +157,7 @@ export default async function (ctx) {
         return "";
       }
     }
+
     return "";
   };
 
@@ -170,6 +183,7 @@ export default async function (ctx) {
       NR: "5G",
       NRNSA: "5G",
     };
+
     const radioKey = d.cellular.radio.toUpperCase().replace(/\s+/g, "");
     netName = radioMap[radioKey] || d.cellular.radio;
     gateway = "蜂窝内网";
@@ -181,7 +195,9 @@ export default async function (ctx) {
         headers: commonHeaders,
         timeout: 4000,
       });
+
       const body = JSON.parse(await res.text());
+
       if (body?.data?.ip) {
         return {
           ip: body.data.ip,
@@ -189,6 +205,7 @@ export default async function (ctx) {
         };
       }
     } catch (e) {}
+
     return { ip: "获取失败", loc: "未知" };
   };
 
@@ -197,8 +214,10 @@ export default async function (ctx) {
       const res = await ctx.http.get("http://ip-api.com/json/?lang=zh-CN", {
         timeout: 4000,
       });
+
       const data = JSON.parse(await res.text());
       const flag = getFlag(data.countryCode);
+
       return {
         ip: data.query || "获取失败",
         loc: `${flag} ${data.city || data.country || ""}`.trim(),
@@ -220,6 +239,7 @@ export default async function (ctx) {
       const res = await ctx.http.get("https://my.ippure.com/v1/info", {
         timeout: 4000,
       });
+
       return JSON.parse(await res.text());
     } catch (e) {
       return {};
@@ -228,6 +248,7 @@ export default async function (ctx) {
 
   const fetchLocalDelay = async () => {
     const start = Date.now();
+
     try {
       await ctx.http.get("http://www.baidu.com", { timeout: 2000 });
       return `${Date.now() - start} ms`;
@@ -238,10 +259,12 @@ export default async function (ctx) {
 
   const fetchProxyDelay = async () => {
     const start = Date.now();
+
     try {
       await ctx.http.get("http://cp.cloudflare.com/generate_204", {
         timeout: 2000,
       });
+
       return `${Date.now() - start} ms`;
     } catch (e) {
       return "超时";
@@ -258,6 +281,7 @@ export default async function (ctx) {
             followRedirect: false,
           })
           .catch(() => null);
+
         return r ? r.status : 0;
       };
 
@@ -283,8 +307,10 @@ export default async function (ctx) {
         .catch(() => null);
 
       if (!res || res.status === 403) return "❌";
+
       const loc = res.headers?.location || res.headers?.Location || "";
       if (loc.includes("unavailable")) return "❌";
+
       return "OK";
     } catch {
       return "❌";
@@ -302,6 +328,7 @@ export default async function (ctx) {
         .catch(() => null);
 
       if (!r || r.status === 403 || r.status === 401) return "❌";
+
       const body = await readBody(r);
       if (body.includes("Access Denied") || body.includes("Please wait...")) return "❌";
 
@@ -322,6 +349,7 @@ export default async function (ctx) {
 
       const tb = await readBody(traceRes);
       const m = tb?.match(/loc=([A-Z]{2})/);
+
       return m?.[1] ? m[1].toUpperCase() : "OK";
     } catch {
       return "❌";
@@ -348,6 +376,7 @@ export default async function (ctx) {
 
       if (body.includes("App unavailable") || body.includes("certain regions")) return "❌";
       if (status === 403 && body.includes("1020")) return "❌";
+
       if (
         status === 403 &&
         (body.includes("cf-turnstile") ||
@@ -356,7 +385,9 @@ export default async function (ctx) {
       ) {
         return "OK";
       }
+
       if (status === 200 || status === 301 || status === 302) return "OK";
+
       return "❌";
     } catch {
       return "❌";
@@ -374,8 +405,10 @@ export default async function (ctx) {
         .catch(() => null);
 
       if (!res) return "❌";
+
       const loc = res.headers?.location || res.headers?.Location || "";
       if (loc.includes("faq")) return "❌";
+
       return "OK";
     } catch {
       return "❌";
@@ -449,7 +482,7 @@ export default async function (ctx) {
   const parseUnlock = (res) => {
     if (res === "❌") {
       return {
-        text: "不可用",
+        text: "失败",
         color: C.red,
       };
     }
@@ -462,15 +495,20 @@ export default async function (ctx) {
     }
 
     return {
-      text: "可用",
+      text: "成功",
       color: C.green,
     };
   };
 
   const fmtUnlock = (name, res, cc) => {
     let flag = "🚫";
-    if (res === "🍿") flag = "🍿";
-    else if (res !== "❌") flag = getFlag(res === "OK" || res === "XX" ? cc : res);
+
+    if (res === "🍿") {
+      flag = "🍿";
+    } else if (res !== "❌") {
+      flag = getFlag(res === "OK" || res === "XX" ? cc : res);
+    }
+
     return `${name} ${flag}`;
   };
 
@@ -514,30 +552,7 @@ export default async function (ctx) {
     ],
   });
 
-  const IpBlock = (label, value, color = C.text) => ({
-    type: "stack",
-    direction: "column",
-    gap: 2,
-    children: [
-      {
-        type: "text",
-        text: label,
-        font: { size: L.ipLabel, weight: "medium" },
-        textColor: C.dim,
-        maxLines: 1,
-      },
-      {
-        type: "text",
-        text: value,
-        font: { size: L.ipValue, weight: "bold" },
-        textColor: color,
-        maxLines: 1,
-        minScale: 0.74,
-      },
-    ],
-  });
-
-  const InfoLine = (label, value, color = C.text) => ({
+  const MainInfoLine = (label, value, color = C.text) => ({
     type: "stack",
     direction: "row",
     alignItems: "center",
@@ -546,7 +561,33 @@ export default async function (ctx) {
       {
         type: "text",
         text: label,
-        width: 36,
+        width: 44,
+        font: { size: L.ipLabel, weight: "medium" },
+        textColor: C.dim,
+        maxLines: 1,
+      },
+      {
+        type: "text",
+        text: value,
+        flex: 1,
+        font: { size: L.ipValue, weight: "bold" },
+        textColor: color,
+        maxLines: 1,
+        minScale: 0.76,
+      },
+    ],
+  });
+
+  const DetailLine = (label, value, color = C.text) => ({
+    type: "stack",
+    direction: "row",
+    alignItems: "center",
+    gap: 8,
+    children: [
+      {
+        type: "text",
+        text: label,
+        width: 44,
         font: { size: L.rowLabel, weight: "regular" },
         textColor: C.dim,
         maxLines: 1,
@@ -558,30 +599,30 @@ export default async function (ctx) {
         font: { size: L.rowValue, weight: "semibold" },
         textColor: color,
         maxLines: 1,
-        minScale: 0.72,
+        minScale: 0.74,
       },
     ],
   });
 
-  const DataColumn = (titleIcon, title, color, ipBlocks, lines) => ({
+  const DataPanel = (icon, title, color, mainLines, detailLines) => ({
     type: "stack",
     direction: "column",
-    gap: L.columnGap,
+    gap: L.panelGap,
     flex: 1,
     children: [
-      SectionHeader(titleIcon, title, color),
+      SectionHeader(icon, title, color),
       {
         type: "stack",
         direction: "column",
-        gap: L.ipGap,
-        children: ipBlocks,
+        gap: L.mainLineGap,
+        children: mainLines,
       },
       ThinDivider(),
       {
         type: "stack",
         direction: "column",
-        gap: L.infoGap,
-        children: lines,
+        gap: L.detailLineGap,
+        children: detailLines,
       },
     ],
   });
@@ -595,7 +636,7 @@ export default async function (ctx) {
     children: [],
   });
 
-  const UnlockItem = (name, res) => {
+  const UnlockChip = (name, res) => {
     const u = parseUnlock(res);
 
     return {
@@ -604,6 +645,9 @@ export default async function (ctx) {
       alignItems: "center",
       gap: 5,
       flex: 1,
+      padding: [4, 7, 4, 7],
+      backgroundColor: C.softBg,
+      borderRadius: 9,
       children: [
         {
           type: "text",
@@ -612,7 +656,7 @@ export default async function (ctx) {
           font: { size: L.appName, weight: "semibold" },
           textColor: C.text,
           maxLines: 1,
-          minScale: 0.82,
+          minScale: 0.78,
         },
         StatusDot(u.color),
         {
@@ -621,13 +665,13 @@ export default async function (ctx) {
           font: { size: L.appStatus, weight: "bold" },
           textColor: u.color,
           maxLines: 1,
-          minScale: 0.82,
+          minScale: 0.8,
         },
       ],
     };
   };
 
-  const UnlockRow = (title, items) => ({
+  const UnlockBand = (title, items) => ({
     type: "stack",
     direction: "row",
     alignItems: "center",
@@ -636,7 +680,7 @@ export default async function (ctx) {
       {
         type: "text",
         text: title,
-        width: 58,
+        width: 52,
         font: { size: L.unlockTitle, weight: "semibold" },
         textColor: C.dim,
         maxLines: 1,
@@ -736,37 +780,37 @@ export default async function (ctx) {
           gap: L.mainColumnGap,
           flex: 1,
           children: [
-            DataColumn(
+            DataPanel(
               netIcon,
               "本地网络",
               C.cpu,
               [
-                IpBlock("内网 IP", localIp),
-                IpBlock("公网 IP", localData.ip),
+                MainInfoLine("内网", localIp),
+                MainInfoLine("公网", localData.ip),
               ],
               [
-                InfoLine("环境", netName),
-                InfoLine("网关", gateway),
-                InfoLine("位置", localData.loc),
-                InfoLine("延迟", localDelay),
+                DetailLine("环境", netName),
+                DetailLine("网关", gateway),
+                DetailLine("位置", localData.loc),
+                DetailLine("延迟", localDelay),
               ]
             ),
 
             VerticalDivider(),
 
-            DataColumn(
+            DataPanel(
               "paperplane.fill",
               "代理出口",
               C.mem,
               [
-                IpBlock("出口 IP", proxyData.ip),
-                IpBlock("落地", proxyData.loc),
+                MainInfoLine("出口", proxyData.ip),
+                MainInfoLine("落地", proxyData.loc),
               ],
               [
-                InfoLine("厂商", proxyData.isp),
-                InfoLine("属性", nativeText, nativeCol),
-                InfoLine("纯净", riskTxt, riskCol),
-                InfoLine("延迟", proxyDelay),
+                DetailLine("厂商", proxyData.isp),
+                DetailLine("属性", nativeText, nativeCol),
+                DetailLine("纯净", riskTxt, riskCol),
+                DetailLine("延迟", proxyDelay),
               ]
             ),
           ],
@@ -779,15 +823,16 @@ export default async function (ctx) {
           direction: "column",
           gap: L.unlockRowGap,
           children: [
-            UnlockRow("流媒体", [
-              UnlockItem("Netflix", rNF),
-              UnlockItem("Disney+", rDP),
-              UnlockItem("TikTok", rTK),
+            UnlockBand("流媒体", [
+              UnlockChip("Netflix", rNF),
+              UnlockChip("Disney+", rDP),
+              UnlockChip("TikTok", rTK),
             ]),
-            UnlockRow("AI", [
-              UnlockItem("ChatGPT", rGPT),
-              UnlockItem("Claude", rCL),
-              UnlockItem("Gemini", rGM),
+
+            UnlockBand("AI", [
+              UnlockChip("ChatGPT", rGPT),
+              UnlockChip("Claude", rCL),
+              UnlockChip("Gemini", rGM),
             ]),
           ],
         },
