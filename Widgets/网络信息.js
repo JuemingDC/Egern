@@ -429,26 +429,34 @@ export default async function (ctx) {
     ? { light: "rgba(247,242,255,0.50)", dark: "rgba(234,240,255,0.46)" }
     : { light: "rgba(58,40,8,0.42)", dark: "rgba(255,247,214,0.46)" };
 
-  // ===== 组件函数 =====
+    // ===== 组件函数 =====
   function getLayout(family) {
     const large = family === "systemLarge" || family === "systemExtraLarge";
     return {
-      widgetPadding: large ? [12, 12, 12, 12] : 14,
-      mainGap: large ? 8 : 10,
+      widgetPadding: large ? [10, 12, 10, 12] : 14,
+      mainGap: large ? 7 : 10,
+
       cardGap: large ? 6 : 5,
-      cardPadding: large ? [8, 9, 8, 9] : [8, 8, 8, 8],
-      radius: large ? 14 : 13,
-      titleSize: large ? 12 : 13,
-      subtitleSize: 10,
+      cardPadding: large ? [9, 10, 9, 10] : [8, 8, 8, 8],
+      radius: large ? 15 : 13,
+
+      titleSize: large ? 11 : 13,
+      subtitleSize: large ? 9 : 10,
       sectionTitleSize: large ? 11 : 10,
+
       labelSize: large ? 10 : 10,
-      valueSize: large ? 11 : 10,
+      valueSize: large ? 13 : 10,
+      ipSize: large ? 15 : 10,
+      smallSize: large ? 10 : 9,
+
       tileNameSize: large ? 10 : 10,
-      tileMainSize: large ? 11 : 11,
-      tileSubSize: large ? 9 : 9,
-      headerIcon: large ? 12 : 14,
+      tileMainSize: large ? 13 : 11,
+      tileSubSize: large ? 10 : 9,
+
+      headerIcon: large ? 11 : 13,
       sectionIcon: large ? 12 : 11,
       mediumRowIcon: 11,
+
       borderWidth: large ? 0 : 0.5,
       tileBorderWidth: large ? 0 : 0.5,
     };
@@ -464,6 +472,7 @@ export default async function (ctx) {
     borderWidth: opt.noBorder ? 0 : layout.borderWidth,
     borderColor: C.cardBorder,
     flex: opt.flex,
+    height: opt.height,
     children,
   });
 
@@ -490,28 +499,80 @@ export default async function (ctx) {
     ],
   });
 
-  const DenseKV = (label, value, valueColor = C.text) => ({
+  const HeroValue = (label, value, color = C.text) => ({
     type: "stack",
-    direction: "row",
-    alignItems: "center",
-    gap: 6,
+    direction: "column",
+    gap: 1,
+    flex: 1,
     children: [
       {
         type: "text",
         text: label,
-        width: 30,
-        font: { size: layout.labelSize, weight: "regular" },
+        font: { size: layout.labelSize, weight: "medium" },
         textColor: C.dim,
         maxLines: 1,
       },
       {
         type: "text",
         text: value,
-        flex: 1,
-        font: { size: layout.valueSize, weight: "semibold" },
-        textColor: valueColor,
+        font: { size: layout.ipSize, weight: "bold" },
+        textColor: color,
         maxLines: 1,
         minScale: 0.58,
+      },
+    ],
+  });
+
+  const PairLine = (leftLabel, leftValue, rightLabel, rightValue, leftColor = C.text, rightColor = C.text) => ({
+    type: "stack",
+    direction: "row",
+    gap: 8,
+    children: [
+      {
+        type: "stack",
+        direction: "column",
+        gap: 1,
+        flex: 1,
+        children: [
+          {
+            type: "text",
+            text: leftLabel,
+            font: { size: layout.smallSize, weight: "regular" },
+            textColor: C.dim,
+            maxLines: 1,
+          },
+          {
+            type: "text",
+            text: leftValue,
+            font: { size: layout.valueSize, weight: "semibold" },
+            textColor: leftColor,
+            maxLines: 1,
+            minScale: 0.58,
+          },
+        ],
+      },
+      {
+        type: "stack",
+        direction: "column",
+        gap: 1,
+        flex: 1,
+        children: [
+          {
+            type: "text",
+            text: rightLabel,
+            font: { size: layout.smallSize, weight: "regular" },
+            textColor: C.dim,
+            maxLines: 1,
+          },
+          {
+            type: "text",
+            text: rightValue,
+            font: { size: layout.valueSize, weight: "semibold" },
+            textColor: rightColor,
+            maxLines: 1,
+            minScale: 0.58,
+          },
+        ],
       },
     ],
   });
@@ -554,7 +615,7 @@ export default async function (ctx) {
         main: "不可用",
         sub: "Blocked",
         color: C.red,
-        icon: "xmark.circle.fill",
+        statusIcon: "xmark.circle.fill",
       };
     }
     if (res === "🍿") {
@@ -562,7 +623,7 @@ export default async function (ctx) {
         main: "仅原创",
         sub: "Original",
         color: C.yellow,
-        icon: "play.circle.fill",
+        statusIcon: "play.circle.fill",
       };
     }
     if (res === "APP") {
@@ -570,83 +631,113 @@ export default async function (ctx) {
         main: "App 可用",
         sub: "APP",
         color: C.netRx,
-        icon: "checkmark.circle.fill",
+        statusIcon: "checkmark.circle.fill",
       };
     }
+
     const region = res === "OK" || res === "XX" ? cc : res;
     return {
       main: "可用",
       sub: `${getFlag(region)} ${region}`,
       color: C.netRx,
-      icon: "checkmark.circle.fill",
+      statusIcon: "checkmark.circle.fill",
     };
   };
 
-  const UnlockTile = (name, icon, res, cc, iconColor) => {
+  const BrandBadge = (text, bg, fg = "#FFFFFF") => ({
+    type: "stack",
+    direction: "column",
+    alignItems: "center",
+    width: 26,
+    height: 26,
+    padding: [4, 0, 0, 0],
+    backgroundColor: bg,
+    borderRadius: 8,
+    children: [
+      {
+        type: "text",
+        text,
+        font: { size: text.length >= 3 ? 8 : 11, weight: "black" },
+        textColor: fg,
+        textAlign: "center",
+        maxLines: 1,
+        minScale: 0.6,
+      },
+    ],
+  });
+
+  const UnlockTile = (brand, badgeText, badgeBg, res, cc) => {
     const u = parseUnlock(res, cc);
     return {
       type: "stack",
-      direction: "column",
-      gap: 4,
+      direction: "row",
+      alignItems: "center",
+      gap: 7,
       padding: [7, 8, 7, 8],
       backgroundColor: C.cardBgSoft,
-      borderRadius: 11,
+      borderRadius: 12,
       borderWidth: layout.tileBorderWidth,
       borderColor: C.cardBorder,
       flex: 1,
       children: [
+        BrandBadge(badgeText, badgeBg),
         {
           type: "stack",
-          direction: "row",
-          alignItems: "center",
-          gap: 4,
+          direction: "column",
+          gap: 1,
+          flex: 1,
           children: [
             {
-              type: "image",
-              src: `sf-symbol:${icon}`,
-              color: iconColor,
-              width: 12,
-              height: 12,
-            },
-            {
               type: "text",
-              text: name,
-              flex: 1,
+              text: brand,
               font: { size: layout.tileNameSize, weight: "semibold" },
               textColor: C.text,
               maxLines: 1,
               minScale: 0.65,
             },
             {
-              type: "image",
-              src: `sf-symbol:${u.icon}`,
-              color: u.color,
-              width: 11,
-              height: 11,
+              type: "text",
+              text: u.main,
+              font: { size: layout.tileMainSize, weight: "bold" },
+              textColor: u.color,
+              maxLines: 1,
+              minScale: 0.68,
+            },
+            {
+              type: "text",
+              text: u.sub,
+              font: { size: layout.tileSubSize, weight: "medium" },
+              textColor: C.muted,
+              maxLines: 1,
+              minScale: 0.65,
             },
           ],
         },
         {
-          type: "text",
-          text: u.main,
-          font: { size: layout.tileMainSize, weight: "bold" },
-          textColor: u.color,
-          maxLines: 1,
-          minScale: 0.7,
-        },
-        {
-          type: "text",
-          text: u.sub,
-          font: { size: layout.tileSubSize, weight: "medium" },
-          textColor: C.muted,
-          maxLines: 1,
-          minScale: 0.65,
+          type: "image",
+          src: `sf-symbol:${u.statusIcon}`,
+          color: u.color,
+          width: 12,
+          height: 12,
         },
       ],
     };
   };
 
-  // ===== 大号组件：重构版 =====
+  const UnlockRow = (title, icon, color, children) => Card([
+    SectionTitle(icon, title, color),
+    {
+      type: "stack",
+      direction: "row",
+      gap: 6,
+      children,
+    },
+  ], {
+    gap: 6,
+    padding: [8, 9, 8, 9],
+  });
+
+  // ===== 大号组件：高空间利用率版 =====
   if (isLarge) {
     return {
       type: "widget",
@@ -654,7 +745,6 @@ export default async function (ctx) {
       gap: layout.mainGap,
       backgroundColor: C.bg,
       children: [
-        // Header：缩小并弱化
         {
           type: "stack",
           direction: "row",
@@ -669,27 +759,20 @@ export default async function (ctx) {
               height: layout.headerIcon,
             },
             {
-              type: "stack",
-              direction: "column",
-              gap: 1,
-              flex: 1,
-              children: [
-                {
-                  type: "text",
-                  text: "网络诊断雷达",
-                  font: { size: layout.titleSize, weight: "semibold" },
-                  textColor: C.text,
-                  maxLines: 1,
-                },
-                {
-                  type: "text",
-                  text: "Local · Proxy · Unlock",
-                  font: { size: layout.subtitleSize, weight: "medium" },
-                  textColor: C.dim,
-                  maxLines: 1,
-                },
-              ],
+              type: "text",
+              text: "网络诊断雷达",
+              font: { size: layout.titleSize, weight: "semibold" },
+              textColor: C.dim,
+              maxLines: 1,
             },
+            {
+              type: "text",
+              text: "Local · Proxy · Unlock",
+              font: { size: layout.subtitleSize, weight: "medium" },
+              textColor: C.dim,
+              maxLines: 1,
+            },
+            { type: "spacer" },
             {
               type: "text",
               text: timeStr,
@@ -699,73 +782,65 @@ export default async function (ctx) {
           ],
         },
 
-        // 第一部分：本地网络 + 代理出口
         {
           type: "stack",
           direction: "row",
           gap: 8,
           children: [
-            Card(
-              [
-                SectionTitle(netIcon, "本地网络", C.cpu),
-                DenseKV("环境", netName),
-                DenseKV("网关", gateway),
-                DenseKV("内网", localIp),
-                DenseKV("公网", localData.ip),
-                DenseKV("位置", localData.loc),
-                DenseKV("延迟", localDelay),
-              ],
-              { flex: 1 }
-            ),
+            Card([
+              SectionTitle(netIcon, "本地网络", C.cpu),
+              {
+                type: "stack",
+                direction: "row",
+                gap: 8,
+                children: [
+                  HeroValue("内网 IP", localIp),
+                  HeroValue("公网 IP", localData.ip),
+                ],
+              },
+              PairLine("环境", netName, "网关", gateway),
+              PairLine("位置", localData.loc, "延迟", localDelay),
+            ], {
+              flex: 1,
+              gap: 7,
+              padding: [10, 11, 10, 11],
+            }),
 
-            Card(
-              [
-                SectionTitle("paperplane.fill", "代理出口", C.mem),
-                DenseKV("出口", proxyData.ip),
-                DenseKV("落地", proxyData.loc),
-                DenseKV("厂商", proxyData.isp),
-                DenseKV("属性", nativeText, nativeCol),
-                DenseKV("纯净", riskTxt, riskCol),
-                DenseKV("延迟", proxyDelay),
-              ],
-              { flex: 1 }
-            ),
+            Card([
+              SectionTitle("paperplane.fill", "代理出口", C.mem),
+              {
+                type: "stack",
+                direction: "row",
+                gap: 8,
+                children: [
+                  HeroValue("出口 IP", proxyData.ip),
+                  HeroValue("落地", proxyData.loc),
+                ],
+              },
+              PairLine("厂商", proxyData.isp, "属性", nativeText, C.text, nativeCol),
+              PairLine("纯净", riskTxt, "延迟", proxyDelay, riskCol, C.text),
+            ], {
+              flex: 1,
+              gap: 7,
+              padding: [10, 11, 10, 11],
+            }),
           ],
         },
 
-        // 第二部分：流媒体解锁
-        Card([
-          SectionTitle("play.tv.fill", "流媒体解锁", C.cpu),
-          {
-            type: "stack",
-            direction: "row",
-            gap: 6,
-            children: [
-              UnlockTile("Netflix", "tv.fill", rNF, proxyData.cc, C.cpu),
-              UnlockTile("Disney+", "star.fill", rDP, proxyData.cc, C.yellow),
-              UnlockTile("TikTok", "music.note", rTK, proxyData.cc, C.netTx),
-            ],
-          },
+        UnlockRow("流媒体解锁", "play.tv.fill", C.cpu, [
+          UnlockTile("Netflix", "N", "#E50914", rNF, proxyData.cc),
+          UnlockTile("Disney+", "D+", "#113CCF", rDP, proxyData.cc),
+          UnlockTile("TikTok", "♪", "#111111", rTK, proxyData.cc),
         ]),
 
-        // 第三部分：AI 解锁
-        Card([
-          SectionTitle("sparkles", "AI 解锁", C.mem),
-          {
-            type: "stack",
-            direction: "row",
-            gap: 6,
-            children: [
-              UnlockTile("ChatGPT", "message.fill", rGPT, proxyData.cc, C.mem),
-              UnlockTile("Claude", "text.bubble.fill", rCL, proxyData.cc, C.cpu),
-              UnlockTile("Gemini", "circle.grid.2x2.fill", rGM, proxyData.cc, C.netTx),
-            ],
-          },
+        UnlockRow("AI 解锁", "sparkles", C.mem, [
+          UnlockTile("ChatGPT", "GPT", "#10A37F", rGPT, proxyData.cc),
+          UnlockTile("Claude", "C", "#D97742", rCL, proxyData.cc),
+          UnlockTile("Gemini", "G", "#6C8CFF", rGM, proxyData.cc),
         ]),
       ],
     };
   }
-
   // ===== 中号组件：保留原信息结构，标题弱化 =====
   return {
     type: "widget",
