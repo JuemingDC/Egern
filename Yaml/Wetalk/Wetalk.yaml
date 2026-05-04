@@ -47,13 +47,13 @@ scriptings:
 
   - schedule:
       name: "WeTalk 签到任务"
-      cron: "20 8,20 * * *"
+      cron: "0 */6 * * *"
       script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/refs/heads/main/JavaScript/Wetalk/Wetalk_task.js"
       timeout: 120
       update_interval: 0
 
   - generic:
       name: "WeTalk 账号管理"
-      script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/refs/heads/main/JavaScript/Wetalk/Wetalk_account_manger.js"
+      script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/refs/heads/main/JavaScript/Wetalk/Wetalk_account_manager.js"
       timeout: 30
       update_interval: 0
