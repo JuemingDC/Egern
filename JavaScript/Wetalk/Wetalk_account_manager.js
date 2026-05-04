@@ -1,13 +1,10 @@
-const DEFAULT_FORCE_DELETE_ACCOUNTS = "";
-const DEFAULT_FORCE_DELETE_ALL = false;
-
 const scriptName = "WeTalk账号管理";
 const storeKey = "wetalk_accounts_v1";
 
-function notify(ctx, title, body = "") {
+function notify(ctx, subtitle, body = "") {
   ctx.notify({
     title: scriptName,
-    subtitle: title,
+    subtitle,
     body
   });
 }
@@ -76,19 +73,21 @@ function formatAccountList(store) {
     return "当前未保存账号。";
   }
 
-  return ids.map((id, index) => {
-    const acc = store.accounts[id] || {};
-    const label = acc.alias || acc.email || acc.id || id;
+  return ids
+    .map((id, index) => {
+      const acc = store.accounts[id] || {};
+      const label = acc.alias || acc.email || acc.id || id;
 
-    return [
-      `${index + 1}. ${label}`,
-      `   id: ${id}`,
-      `   email: ${acc.email || ""}`,
-      `   alias: ${acc.alias || ""}`,
-      `   hasCapture: ${acc.capture?.paramsRaw ? "yes" : "no"}`,
-      `   updatedAt: ${formatTime(acc.updatedAt)}`
-    ].join("\n");
-  }).join("\n\n");
+      return [
+        `${index + 1}. ${label}`,
+        `id: ${id}`,
+        `email: ${acc.email || ""}`,
+        `alias: ${acc.alias || ""}`,
+        `hasCapture: ${acc.capture?.paramsRaw ? "yes" : "no"}`,
+        `updatedAt: ${formatTime(acc.updatedAt)}`
+      ].join("\n");
+    })
+    .join("\n\n");
 }
 
 function normalizeText(value) {
@@ -101,10 +100,8 @@ function matchAccountIds(store, tokens) {
 
   for (const tokenRaw of tokens) {
     const token = normalizeText(tokenRaw);
-
     if (!token) continue;
 
-    // 支持按编号删除：1、2、3...
     if (/^\d+$/.test(token)) {
       const index = Number(token);
 
@@ -114,16 +111,10 @@ function matchAccountIds(store, tokens) {
       }
     }
 
-    // 支持按 id / email / alias 精确匹配
     for (const id of ids) {
       const acc = store.accounts[id] || {};
 
-      const candidates = [
-        id,
-        acc.id,
-        acc.email,
-        acc.alias
-      ]
+      const candidates = [id, acc.id, acc.email, acc.alias]
         .filter(Boolean)
         .map(v => normalizeText(v));
 
@@ -140,22 +131,16 @@ function boolFromEnv(value, fallback = false) {
   if (value === undefined || value === null || value === "") return fallback;
 
   const s = String(value).trim().toLowerCase();
-
   return s === "true" || s === "1" || s === "yes" || s === "y";
 }
 
-export default async function(ctx) {
+export default async function (ctx) {
   const store = loadStore(ctx);
-
   const env = ctx.env || {};
 
-  const envDelete = env.DELETE_ACCOUNTS || "";
-  const envDeleteAll = boolFromEnv(env.DELETE_ALL, false);
-
-  const deleteAll = DEFAULT_FORCE_DELETE_ALL || envDeleteAll;
-  const deleteInput = DEFAULT_FORCE_DELETE_ACCOUNTS || envDelete;
+  const deleteInput = env.DELETE_ACCOUNTS || "";
+  const deleteAll = boolFromEnv(env.DELETE_ALL, false);
   const deleteTokens = splitList(deleteInput);
-
   const beforeList = formatAccountList(store);
 
   if (deleteAll) {
@@ -177,6 +162,7 @@ export default async function(ctx) {
         "请立刻回到模块设置页，把 DELETE_ALL 改回 false，避免下次误删。"
       ].join("\n")
     );
+
     return;
   }
 
@@ -185,7 +171,7 @@ export default async function(ctx) {
       ctx,
       `当前账号：${store.order.length} 个`,
       [
-        `DELETE_ACCOUNTS: ${envDelete || "(空)"}`,
+        `DELETE_ACCOUNTS: ${deleteInput || "(空)"}`,
         `DELETE_ALL: ${String(env.DELETE_ALL ?? "(空)")}`,
         "",
         "当前账号列表：",
@@ -194,10 +180,11 @@ export default async function(ctx) {
         "删除方法：",
         "1. 回到模块设置页，在“删除账号 / DELETE_ACCOUNTS”里填写编号，例如 2",
         "2. 保存模块设置",
-        "3. 手动运行 “WeTalk 账号管理”",
+        "3. 手动运行“WeTalk 账号管理”",
         "4. 删除完成后清空“删除账号 / DELETE_ACCOUNTS”"
       ].join("\n")
     );
+
     return;
   }
 
@@ -216,6 +203,7 @@ export default async function(ctx) {
         "建议：优先使用账号编号删除，例如 1 或 2。"
       ].join("\n")
     );
+
     return;
   }
 
