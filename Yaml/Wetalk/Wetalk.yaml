@@ -1,34 +1,55 @@
-name: "WeTalk 自动化签到+视频奖励"
-description: "WeTalk 抓取账号参数后，定时执行签到与视频奖励任务。支持多账号查看、指定运行和删除账号。"
-author: "TG@ZenMoFiShi, converted for Egern"
+name: "WeTalk Auto CheckIn"
+description: "WeTalk daily check-in + video bonus, multi-account support."
+author: "TG@ZenMoFiShi (Egern port)"
 icon: "checkmark.seal.fill"
 
 env_schema:
-  RUN_ACCOUNTS:
-    name: "运行账号"
-    description: "留空运行全部。可填编号、邮箱、账号ID或别名，多个用逗号、分号或换行分隔。"
-    default_value: ""
-
-  DELETE_ACCOUNTS:
-    name: "删除账号"
-    description: "填写要删除的账号编号、邮箱、账号ID或别名。推荐填编号，例如 2。多个用逗号、分号或换行分隔。"
-    default_value: ""
-
-  DELETE_ALL:
-    name: "清空全部账号"
-    description: "设为 true 后，手动运行账号管理脚本会清空全部账号。"
-    default_value: "false"
+  CAPTURE_ENABLED:
+    name: "账号抓取 - 启用"
+    description: "关闭后抓包脚本不再处理任何请求"
     options:
-      - "false"
       - "true"
+      - "false"
+    default_value: "true"
 
-  SHOW_SENSITIVE:
-    name: "显示敏感信息"
-    description: "设为 true 后，抓取通知中显示完整账号信息；默认隐藏部分信息。"
-    default_value: "false"
+  TASK_ENABLED:
+    name: "签到任务 - 总开关"
+    description: "关闭后定时任务不执行任何操作"
     options:
-      - "false"
       - "true"
+      - "false"
+    default_value: "true"
+
+  ENABLE_CHECKIN:
+    name: "签到任务 - 执行签到"
+    description: "是否执行每日签到"
+    options:
+      - "true"
+      - "false"
+    default_value: "true"
+
+  ENABLE_VIDEO:
+    name: "签到任务 - 执行视频奖励"
+    description: "是否领取视频奖励金币"
+    options:
+      - "true"
+      - "false"
+    default_value: "true"
+
+  MAX_VIDEO:
+    name: "签到任务 - 最大视频次数"
+    description: "每账号每次最多领取视频奖励次数 (1-10)"
+    default_value: "5"
+
+  VIDEO_DELAY_MS:
+    name: "签到任务 - 视频间隔(ms)"
+    description: "两次视频请求之间的等待毫秒数,建议不低于 6000"
+    default_value: "8000"
+
+  ACCOUNT_GAP_MS:
+    name: "签到任务 - 账号切换间隔(ms)"
+    description: "多账号依次执行时,账号之间的等待毫秒数"
+    default_value: "3500"
 
 mitm:
   hostnames:
@@ -39,21 +60,13 @@ http_captures:
 
 scriptings:
   - http_request:
-      name: "WeTalk 参数抓取"
+      name: "WeTalk 账号抓取"
       match: "^https://api\\.wetalkapp\\.com/app/queryBalanceAndBonus"
-      script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/refs/heads/main/JavaScript/Wetalk/Wetalk_capture.js"
+      script_url: "https://github.com/158212892/QuantumultXMark/raw/refs/heads/main/My/Scripts/WeTalk_capture.js"
       timeout: 10
-      update_interval: 0
 
   - schedule:
       name: "WeTalk 签到任务"
-      cron: "0 */6 * * *"
-      script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/refs/heads/main/JavaScript/Wetalk/Wetalk_task.js"
+      cron: "20 8,20 * * *"
+      script_url: "https://github.com/158212892/QuantumultXMark/raw/refs/heads/main/My/Scripts/WeTalk_task.js"
       timeout: 120
-      update_interval: 0
-
-  - generic:
-      name: "WeTalk 账号管理"
-      script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/refs/heads/main/JavaScript/Wetalk/Wetalk_account_manager.js"
-      timeout: 30
-      update_interval: 0
