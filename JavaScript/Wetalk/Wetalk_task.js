@@ -1,579 +1,164 @@
-const scriptName = "WeTalk";
-const storeKey = "wetalk_accounts_v1";
-const SECRET = "0fOiukQq7jXZV2GRi9LGlO";
-const API_HOST = "api.wetalkapp.com";
+/**
+ * WeTalk_task.js - Egern 定时脚本
+ * 查看日志：Egern -> 日志 -> 脚本 (查看任务执行流水)
+ */
 
-const IOS_VERSIONS = [
-  "17.5.1",
-  "17.6.1",
-  "17.4.1",
-  "17.2.1",
-  "16.7.8",
-  "17.6",
-  "17.3.1",
-  "18.0.1",
-  "17.1.2",
-  "16.6.1"
-];
-
-const IOS_SCALES = ["2.00", "3.00", "3.00", "2.00", "3.00"];
-
-const IPHONE_MODELS = [
-  "iPhone14,3",
-  "iPhone13,3",
-  "iPhone15,3",
-  "iPhone16,1",
-  "iPhone14,7",
-  "iPhone13,2",
-  "iPhone15,2",
-  "iPhone12,1"
-];
-
-const CFN_VERS = [
-  "1410.0.3",
-  "1494.0.7",
-  "1568.100.1",
-  "1209.1",
-  "1474.0.4",
-  "1568.200.2"
-];
-
-const DARWIN_VERS = [
-  "22.6.0",
-  "23.5.0",
-  "23.6.0",
-  "24.0.0",
-  "22.4.0"
-];
-
-function notify(ctx, subtitle, body = "") {
-  ctx.notify({
-    title: scriptName,
-    subtitle,
-    body
-  });
-}
-
-function boolEnv(value, fallback = true) {
-  if (value === undefined || value === null || value === "") return fallback;
-  const s = String(value).trim().toLowerCase();
-  return s === "true" || s === "1" || s === "yes" || s === "y";
-}
-
-function intEnv(value, fallback, min, max) {
-  const n = parseInt(String(value ?? ""), 10);
-
-  if (!Number.isFinite(n)) return fallback;
-  if (typeof min === "number" && n < min) return min;
-  if (typeof max === "number" && n > max) return max;
-
-  return n;
-}
-
-function safeDecode(value) {
-  if (value == null) return "";
-
-  try {
-    return decodeURIComponent(String(value));
-  } catch {
-    return String(value);
-  }
-}
-
-function emailKeyOf(paramsRaw) {
-  const raw = paramsRaw?.email;
-  return raw ? safeDecode(raw).trim().toLowerCase() : "";
-}
-
-function md5(input) {
-  function add32(a, b) {
-    return (a + b) & 0xffffffff;
-  }
-
-  function cmn(q, a, b, x, s, t) {
-    const n = add32(add32(a, q), add32(x, t));
-    return add32((n << s) | (n >>> (32 - s)), b);
-  }
-
-  function ff(a, b, c, d, x, s, t) {
-    return cmn((b & c) | (~b & d), a, b, x, s, t);
-  }
-
-  function gg(a, b, c, d, x, s, t) {
-    return cmn((b & d) | (c & ~d), a, b, x, s, t);
-  }
-
-  function hh(a, b, c, d, x, s, t) {
-    return cmn(b ^ c ^ d, a, b, x, s, t);
-  }
-
-  function ii(a, b, c, d, x, s, t) {
-    return cmn(c ^ (b | ~d), a, b, x, s, t);
-  }
-
-  const str = unescape(encodeURIComponent(String(input)));
-  const words = [];
-
-  for (let i = 0; i < str.length; i++) {
-    words[i >> 2] |= str.charCodeAt(i) << ((i % 4) * 8);
-  }
-
-  words[str.length >> 2] |= 0x80 << ((str.length % 4) * 8);
-  words[(((str.length + 8) >> 6) + 1) * 16 - 2] = str.length * 8;
-
-  let a = 1732584193;
-  let b = -271733879;
-  let c = -1732584194;
-  let d = 271733878;
-
-  for (let i = 0; i < words.length; i += 16) {
-    const oa = a;
-    const ob = b;
-    const oc = c;
-    const od = d;
-
-    a = ff(a, b, c, d, words[i], 7, -680876936);
-    d = ff(d, a, b, c, words[i + 1], 12, -389564586);
-    c = ff(c, d, a, b, words[i + 2], 17, 606105819);
-    b = ff(b, c, d, a, words[i + 3], 22, -1044525330);
-    a = ff(a, b, c, d, words[i + 4], 7, -176418897);
-    d = ff(d, a, b, c, words[i + 5], 12, 1200080426);
-    c = ff(c, d, a, b, words[i + 6], 17, -1473231341);
-    b = ff(b, c, d, a, words[i + 7], 22, -45705983);
-    a = ff(a, b, c, d, words[i + 8], 7, 1770035416);
-    d = ff(d, a, b, c, words[i + 9], 12, -1958414417);
-    c = ff(c, d, a, b, words[i + 10], 17, -42063);
-    b = ff(b, c, d, a, words[i + 11], 22, -1990404162);
-    a = ff(a, b, c, d, words[i + 12], 7, 1804603682);
-    d = ff(d, a, b, c, words[i + 13], 12, -40341101);
-    c = ff(c, d, a, b, words[i + 14], 17, -1502002290);
-    b = ff(b, c, d, a, words[i + 15], 22, 1236535329);
-
-    a = gg(a, b, c, d, words[i + 1], 5, -165796510);
-    d = gg(d, a, b, c, words[i + 6], 9, -1069501632);
-    c = gg(c, d, a, b, words[i + 11], 14, 643717713);
-    b = gg(b, c, d, a, words[i], 20, -373897302);
-    a = gg(a, b, c, d, words[i + 5], 5, -701558691);
-    d = gg(d, a, b, c, words[i + 10], 9, 38016083);
-    c = gg(c, d, a, b, words[i + 15], 14, -660478335);
-    b = gg(b, c, d, a, words[i + 4], 20, -405537848);
-    a = gg(a, b, c, d, words[i + 9], 5, 568446438);
-    d = gg(d, a, b, c, words[i + 14], 9, -1019803690);
-    c = gg(c, d, a, b, words[i + 3], 14, -187363961);
-    b = gg(b, c, d, a, words[i + 8], 20, 1163531501);
-    a = gg(a, b, c, d, words[i + 13], 5, -1444681467);
-    d = gg(d, a, b, c, words[i + 2], 9, -51403784);
-    c = gg(c, d, a, b, words[i + 7], 14, 1735328473);
-    b = gg(b, c, d, a, words[i + 12], 20, -1926607734);
-
-    a = hh(a, b, c, d, words[i + 5], 4, -378558);
-    d = hh(d, a, b, c, words[i + 8], 11, -2022574463);
-    c = hh(c, d, a, b, words[i + 11], 16, 1839030562);
-    b = hh(b, c, d, a, words[i + 14], 23, -35309556);
-    a = hh(a, b, c, d, words[i + 1], 4, -1530992060);
-    d = hh(d, a, b, c, words[i + 4], 11, 1272893353);
-    c = hh(c, d, a, b, words[i + 7], 16, -155497632);
-    b = hh(b, c, d, a, words[i + 10], 23, -1094730640);
-    a = hh(a, b, c, d, words[i + 13], 4, 681279174);
-    d = hh(d, a, b, c, words[i], 11, -358537222);
-    c = hh(c, d, a, b, words[i + 3], 16, -722521979);
-    b = hh(b, c, d, a, words[i + 6], 23, 76029189);
-    a = hh(a, b, c, d, words[i + 9], 4, -640364487);
-    d = hh(d, a, b, c, words[i + 12], 11, -421815835);
-    c = hh(c, d, a, b, words[i + 15], 16, 530742520);
-    b = hh(b, c, d, a, words[i + 2], 23, -995338651);
-
-    a = ii(a, b, c, d, words[i], 6, -198630844);
-    d = ii(d, a, b, c, words[i + 7], 10, 1126891415);
-    c = ii(c, d, a, b, words[i + 14], 15, -1416354905);
-    b = ii(b, c, d, a, words[i + 5], 21, -57434055);
-    a = ii(a, b, c, d, words[i + 12], 6, 1700485571);
-    d = ii(d, a, b, c, words[i + 3], 10, -1894986606);
-    c = ii(c, d, a, b, words[i + 10], 15, -1051523);
-    b = ii(b, c, d, a, words[i + 1], 21, -2054922799);
-    a = ii(a, b, c, d, words[i + 8], 6, 1873313359);
-    d = ii(d, a, b, c, words[i + 15], 10, -30611744);
-    c = ii(c, d, a, b, words[i + 6], 15, -1560198380);
-    b = ii(b, c, d, a, words[i + 13], 21, 1309151649);
-    a = ii(a, b, c, d, words[i + 4], 6, -145523070);
-    d = ii(d, a, b, c, words[i + 11], 10, -1120210379);
-    c = ii(c, d, a, b, words[i + 2], 15, 718787259);
-    b = ii(b, c, d, a, words[i + 9], 21, -343485551);
-
-    a = add32(a, oa);
-    b = add32(b, ob);
-    c = add32(c, oc);
-    d = add32(d, od);
-  }
-
-  return [a, b, c, d]
-    .map(n => {
-      let s = "";
-      for (let j = 0; j < 4; j++) {
-        s += ("0" + ((n >> (j * 8)) & 255).toString(16)).slice(-2);
-      }
-      return s;
-    })
-    .join("");
-}
-
-function getUTCSignDate() {
-  const now = new Date();
-  const pad = n => String(n).padStart(2, "0");
-
-  return [
-    `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())}`,
-    `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`
-  ].join(" ");
-}
-
-function loadStore(ctx) {
-  const store = ctx.storage.getJSON(storeKey);
-
-  if (!store || typeof store !== "object") {
-    return {
-      version: 3,
-      accounts: {},
-      order: []
-    };
-  }
-
-  if (!store.accounts || typeof store.accounts !== "object") {
-    store.accounts = {};
-  }
-
-  if (!Array.isArray(store.order)) {
-    store.order = Object.keys(store.accounts);
-  }
-
-  return migrateStore(store);
-}
-
-function migrateStore(store) {
-  const newAccounts = {};
-  const newOrder = [];
-
-  for (const oldId of store.order || Object.keys(store.accounts || {})) {
-    const acc = store.accounts?.[oldId];
-    if (!acc) continue;
-
-    const email = emailKeyOf(acc.capture?.paramsRaw);
-    const newId = email || oldId;
-
-    const existing = newAccounts[newId];
-
-    if (!existing || (acc.updatedAt || 0) >= (existing.updatedAt || 0)) {
-      newAccounts[newId] = {
-        ...acc,
-        id: newId,
-        alias: acc.alias || email || newId
-      };
-
-      if (!newOrder.includes(newId)) {
-        newOrder.push(newId);
-      }
+function MD5(s) {
+    function RL(v, n) { return (v << n) | (v >>> (32 - n)); }
+    function AU(x, y) {
+        var x4 = x & 0x40000000, y4 = y & 0x40000000, x8 = x & 0x80000000, y8 = y & 0x80000000;
+        var r = (x & 0x3FFFFFFF) + (y & 0x3FFFFFFF);
+        if (x4 & y4) return r ^ 0x80000000 ^ x8 ^ y8;
+        if (x4 | y4) return (r & 0x40000000) ? (r ^ 0xC0000000 ^ x8 ^ y8) : (r ^ 0x40000000 ^ x8 ^ y8);
+        return r ^ x8 ^ y8;
     }
-  }
-
-  store.accounts = newAccounts;
-  store.order = newOrder.filter(id => store.accounts[id]);
-  store.version = 3;
-
-  return store;
+    function F(x, y, z) { return (x & y) | ((~x) & z); }
+    function G(x, y, z) { return (x & z) | (y & (~z)); }
+    function H(x, y, z) { return x ^ y ^ z; }
+    function I(x, y, z) { return y ^ (x | (~z)); }
+    function FF(a, b, c, d, x, s, ac) { a = AU(a, AU(AU(F(b, c, d), x), ac)); return AU(RL(a, s), b); }
+    function GG(a, b, c, d, x, s, ac) { a = AU(a, AU(AU(G(b, c, d), x), ac)); return AU(RL(a, s), b); }
+    function HH(a, b, c, d, x, s, ac) { a = AU(a, AU(AU(H(b, c, d), x), ac)); return AU(RL(a, s), b); }
+    function II(a, b, c, d, x, s, ac) { a = AU(a, AU(AU(I(b, c, d), x), ac)); return AU(RL(a, s), b); }
+    function CWA(str) {
+        var ml = str.length, t1 = ml + 8, t2 = (t1 - (t1 % 64)) / 64, nw = (t2 + 1) * 16;
+        var wa = Array(nw).fill(0), bp = 0, bc = 0;
+        while (bc < ml) { var wc = (bc - (bc % 4)) / 4; bp = (bc % 4) * 8; wa[wc] |= str.charCodeAt(bc) << bp; bc++; }
+        var wc = (bc - (bc % 4)) / 4; bp = (bc % 4) * 8; wa[wc] |= 0x80 << bp;
+        wa[nw - 2] = ml << 3; wa[nw - 1] = ml >>> 29; return wa;
+    }
+    function W2H(v) { var r = ''; for (var i = 0; i <= 3; i++) { var b = (v >>> (i * 8)) & 255; var t = '0' + b.toString(16); r += t.substr(t.length - 2, 2); } return r; }
+    var x = CWA(s), a = 0x67452301, b = 0xEFCDAB89, c = 0x98BADCFE, d = 0x10325476;
+    var S11 = 7, S12 = 12, S13 = 17, S14 = 22, S21 = 5, S22 = 9, S23 = 14, S24 = 20;
+    var S31 = 4, S32 = 11, S33 = 16, S34 = 23, S41 = 6, S42 = 10, S43 = 15, S44 = 21;
+    for (var k = 0; k < x.length; k += 16) {
+        var AA = a, BB = b, CC = c, DD = d;
+        a = FF(a, b, c, d, x[k + 0], S11, 0xD76AA478); d = FF(d, a, b, c, x[k + 1], S12, 0xE8C7B756); c = FF(c, d, a, b, x[k + 2], S13, 0x242070DB); b = FF(b, c, d, a, x[k + 3], S14, 0xC1BDCEEE);
+        a = FF(a, b, c, d, x[k + 4], S11, 0xF57C0FAF); d = FF(d, a, b, c, x[k + 5], S12, 0x4787C62A); c = FF(c, d, a, b, x[k + 6], S13, 0xA8304613); b = FF(b, c, d, a, x[k + 7], S14, 0xFD469501);
+        a = FF(a, b, c, d, x[k + 8], S11, 0x698098D8); d = FF(d, a, b, c, x[k + 9], S12, 0x8B44F7AF); c = FF(c, d, a, b, x[k + 10], S13, 0xFFFF5BB1); b = FF(b, c, d, a, x[k + 11], S14, 0x895CD7BE);
+        a = FF(a, b, c, d, x[k + 12], S11, 0x6B901122); d = FF(d, a, b, c, x[k + 13], S12, 0xFD987193); c = FF(c, d, a, b, x[k + 14], S13, 0xA679438E); b = FF(b, c, d, a, x[k + 15], S14, 0x49B40821);
+        a = GG(a, b, c, d, x[k + 1], S21, 0xF61E2562); d = GG(d, a, b, c, x[k + 6], S22, 0xC040B340); c = GG(c, d, a, b, x[k + 11], S23, 0x265E5A51); b = GG(b, c, d, a, x[k + 0], S24, 0xE9B6C7AA);
+        a = GG(a, b, c, d, x[k + 5], S21, 0xD62F105D); d = GG(d, a, b, c, x[k + 10], S22, 0x02441453); c = GG(c, d, a, b, x[k + 15], S23, 0xD8A1E681); b = GG(b, c, d, a, x[k + 4], S24, 0xE7D3FBC8);
+        a = GG(a, b, c, d, x[k + 9], S21, 0x21E1CDE6); d = GG(d, a, b, c, x[k + 14], S22, 0xC33707D6); c = GG(c, d, a, b, x[k + 3], S23, 0xF4D50D87); b = GG(b, c, d, a, x[k + 8], S24, 0x455A14ED);
+        a = GG(a, b, c, d, x[k + 13], S21, 0xA9E3E905); d = GG(d, a, b, c, x[k + 2], S22, 0xFCEFA3F8); c = GG(c, d, a, b, x[k + 7], S23, 0x676F02D9); b = GG(b, c, d, a, x[k + 12], S24, 0x8D2A4C8A);
+        a = HH(a, b, c, d, x[k + 5], S31, 0xFFFA3942); d = HH(d, a, b, c, x[k + 8], S32, 0x8771F681); c = HH(c, d, a, b, x[k + 11], S33, 0x6D9D6122); b = HH(b, c, d, a, x[k + 14], S34, 0xFDE5380C);
+        a = HH(a, b, c, d, x[k + 1], S31, 0xA4BEEA44); d = HH(d, a, b, c, x[k + 4], S32, 0x4BDECFA9); c = HH(c, d, a, b, x[k + 7], S33, 0xF6BB4B60); b = HH(b, c, d, a, x[k + 10], S34, 0xBEBFBC70);
+        a = HH(a, b, c, d, x[k + 13], S31, 0x289B7EC6); d = HH(d, a, b, c, x[k + 0], S32, 0xEAA127FA); c = HH(c, d, a, b, x[k + 3], S33, 0xD4EF3085); b = HH(b, c, d, a, x[k + 6], S34, 0x04881D05);
+        a = HH(a, b, c, d, x[k + 9], S31, 0xD9D4D039); d = HH(d, a, b, c, x[k + 12], S32, 0xE6DB99E5); c = HH(c, d, a, b, x[k + 15], S33, 0x1FA27CF8); b = HH(b, c, d, a, x[k + 2], S34, 0xC4AC5665);
+        a = II(a, b, c, d, x[k + 0], S41, 0xF4292244); d = II(d, a, b, c, x[k + 7], S42, 0x432AFF97); c = II(c, d, a, b, x[k + 14], S43, 0xAB9423A7); b = II(b, c, d, a, x[k + 5], S44, 0xFC93A039);
+        a = II(a, b, c, d, x[k + 12], S41, 0x655B59C3); d = II(d, a, b, c, x[k + 3], S42, 0x8F0CCC92); c = II(c, d, a, b, x[k + 10], S43, 0xFFEFF47D); b = II(b, c, d, a, x[k + 1], S44, 0x85845DD1);
+        a = II(a, b, c, d, x[k + 8], S41, 0x6FA87E4F); d = II(d, a, b, c, x[k + 15], S42, 0xFE2CE6E0); c = II(c, d, a, b, x[k + 6], S43, 0xA3014314); b = II(b, c, d, a, x[k + 13], S44, 0x4E0811A1);
+        a = II(a, b, c, d, x[k + 4], S41, 0xF7537E82); d = II(d, a, b, c, x[k + 11], S42, 0xBD3AF235); c = II(c, d, a, b, x[k + 2], S43, 0x2AD7D2BB); b = II(b, c, d, a, x[k + 9], S44, 0xEB86D391);
+        a = AU(a, AA); b = AU(b, BB); c = AU(c, CC); d = AU(d, DD);
+    }
+    return (W2H(a) + W2H(b) + W2H(c) + W2H(d)).toLowerCase();
 }
 
-function pick(arr, seed) {
-  return arr[Math.abs(seed) % arr.length];
+var SECRET = '0fOiukQq7jXZV2GRi9LGlO';
+var API_HOST = 'api.wetalkapp.com';
+var STORE_KEY = 'wetalk_accounts_v1';
+var IOS_VER = ['17.5.1', '17.6.1', '17.4.1', '18.0.1'];
+var MODELS = ['iPhone14,3', 'iPhone15,3', 'iPhone16,1'];
+
+function pick(arr, seed) { return arr[seed % arr.length]; }
+function buildUA(base, seed) {
+    var iv = pick(IOS_VER, seed), mo = pick(MODELS, seed + 2);
+    if (base && typeof base === 'string') {
+        var ua = base;
+        ua = ua.replace(/iOS \d+(\.\d+){0,2}/, 'iOS ' + iv);
+        ua = ua.replace(/iPhone\d+,\d+/, mo);
+        return ua;
+    }
+    return 'WeTalk/30.6.0 (com.innovationworks.wetalk; build:28; iOS ' + iv + ') Alamofire/5.4.3';
 }
 
-function buildUA(baseUA, seed = 0) {
-  const iosVer = pick(IOS_VERSIONS, seed);
-  const scale = pick(IOS_SCALES, seed + 1);
-  const model = pick(IPHONE_MODELS, seed + 2);
-  const cfn = pick(CFN_VERS, seed + 3);
-  const darwin = pick(DARWIN_VERS, seed + 4);
+function signedParams(capture) {
+    var p = {};
+    Object.keys(capture.paramsRaw || {}).forEach(function (k) {
+        if (k !== 'sign' && k !== 'signDate') p[k] = capture.paramsRaw[k];
+    });
+    var n = new Date();
+    var pad = function (x) { return String(x).padStart(2, '0'); };
+    p.signDate = n.getUTCFullYear() + '-' + pad(n.getUTCMonth() + 1) + '-' + pad(n.getUTCDate()) + ' ' + pad(n.getUTCHours()) + ':' + pad(n.getUTCMinutes()) + ':' + pad(n.getUTCSeconds());
+    var base = Object.keys(p).sort().map(function (k) { return k + '=' + p[k]; }).join('&');
+    p.sign = MD5(base + SECRET);
+    return p;
+}
 
-  if (baseUA && typeof baseUA === "string") {
-    let ua = baseUA;
-    let changed = false;
+async function runAccount(ctx, acc, idx, total, opts) {
+    var label = '[' + (idx + 1) + '/' + total + ' ' + acc.alias + ']';
+    console.log(label + " 开始处理...");
+    var ua = buildUA(acc.baseUA, acc.uaSeed);
+    var headers = acc.capture.headers || {};
+    headers['User-Agent'] = ua;
+    headers['Host'] = API_HOST;
 
-    const replacements = [
-      [/iOS \d+(\.\d+){0,2}/, `iOS ${iosVer}`],
-      [/Scale\/\d+(\.\d+)?/, `Scale/${scale}`],
-      [/iPhone\d+,\d+/, model],
-      [/CFNetwork\/[\d.]+/, `CFNetwork/${cfn}`],
-      [/Darwin\/[\d.]+/, `Darwin/${darwin}`]
-    ];
-
-    for (const [pattern, value] of replacements) {
-      if (pattern.test(ua)) {
-        ua = ua.replace(pattern, value);
-        changed = true;
-      }
+    async function api(path) {
+        var p = signedParams(acc.capture);
+        var qs = Object.keys(p).map(function (k) { return k + '=' + encodeURIComponent(p[k]); }).join('&');
+        var url = 'https://' + API_HOST + '/app/' + path + '?' + qs;
+        var resp = await ctx.http.get(url, { headers: headers });
+        return resp.json();
     }
 
-    if (changed) return ua;
-  }
-
-  return `WeTalk/30.6.0 (com.innovationworks.wetalk; build:28; iOS ${iosVer}) Alamofire/5.4.3`;
-}
-
-function buildSignedParamsRaw(capture) {
-  const params = {};
-
-  for (const [key, value] of Object.entries(capture?.paramsRaw || {})) {
-    if (key !== "sign" && key !== "signDate") {
-      params[key] = value;
-    }
-  }
-
-  params.signDate = getUTCSignDate();
-
-  const signBase = Object.keys(params)
-    .sort()
-    .map(key => `${key}=${params[key]}`)
-    .join("&");
-
-  params.sign = md5(signBase + SECRET);
-
-  return params;
-}
-
-function buildUrl(path, capture) {
-  const params = buildSignedParamsRaw(capture);
-  const original = capture?.paramsRaw || {};
-
-  const query = Object.keys(params)
-    .map(key => {
-      const value = params[key];
-
-      if (
-        Object.prototype.hasOwnProperty.call(original, key) &&
-        key !== "sign" &&
-        key !== "signDate"
-      ) {
-        return `${encodeURIComponent(key)}=${value}`;
-      }
-
-      return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
-    })
-    .join("&");
-
-  return `https://${API_HOST}/app/${path}?${query}`;
-}
-
-function buildHeaders(capture, ua) {
-  const headers = {
-    ...(capture?.headers || {})
-  };
-
-  for (const key of Object.keys(headers)) {
-    const lower = key.toLowerCase();
-
-    if (
-      lower === "content-length" ||
-      lower === "user-agent" ||
-      lower === "host" ||
-      key.startsWith(":")
-    ) {
-      delete headers[key];
-    }
-  }
-
-  headers.Host = API_HOST;
-  headers.Accept = headers.Accept || headers.accept || "application/json";
-  headers["User-Agent"] = ua;
-
-  return headers;
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function parseResponseJSON(response) {
-  const text = await response.text();
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return {
-      retcode: -1,
-      retmsg: `响应不是 JSON：${String(text || "").slice(0, 120)}`
-    };
-  }
-}
-
-async function fetchApi(ctx, acc, path) {
-  const ua = buildUA(acc.baseUA, acc.uaSeed || 0);
-  const headers = buildHeaders(acc.capture, ua);
-  const url = buildUrl(path, acc.capture);
-
-  const response = await ctx.http.get(url, {
-    headers
-  });
-
-  return await parseResponseJSON(response);
-}
-
-function splitEnvList(value) {
-  return String(value || "")
-    .split(/[\n,，;；\s]+/)
-    .map(s => s.trim())
-    .filter(Boolean);
-}
-
-function matchAccountIds(store, tokens) {
-  const allIds = (store.order || []).filter(
-    id => store.accounts?.[id]?.capture?.paramsRaw
-  );
-
-  if (!tokens.length) {
-    return allIds;
-  }
-
-  const result = new Set();
-
-  for (const tokenRaw of tokens) {
-    const token = String(tokenRaw).trim().toLowerCase();
-    if (!token) continue;
-
-    if (/^\d+$/.test(token)) {
-      const index = Number(token);
-
-      if (index >= 1 && index <= allIds.length) {
-        result.add(allIds[index - 1]);
-        continue;
-      }
-    }
-
-    for (const id of allIds) {
-      const acc = store.accounts[id];
-
-      const candidates = [id, acc.id, acc.email, acc.alias]
-        .filter(Boolean)
-        .map(v => String(v).trim().toLowerCase());
-
-      if (candidates.includes(token)) {
-        result.add(id);
-      }
-    }
-  }
-
-  return [...result];
-}
-
-async function runAccount(ctx, acc, index, total, opts) {
-  const tag = `[账号${index + 1}/${total} ${acc.alias || acc.email || acc.id}]`;
-  const msgs = [tag];
-
-  try {
-    const balance = await fetchApi(ctx, acc, "queryBalanceAndBonus");
-
-    if (balance.retcode === 0) {
-      msgs.push(`余额：${balance.result?.balance ?? "?"} Coins`);
-    } else {
-      msgs.push(`查询：${balance.retmsg || "失败"}`);
-    }
-  } catch (err) {
-    msgs.push(`查询异常：${err.message || String(err)}`);
-  }
-
-  if (opts.enableCheckin) {
+    var logArr = [label];
     try {
-      const checkin = await fetchApi(ctx, acc, "checkIn");
-
-      if (checkin.retcode === 0) {
-        const hint = String(checkin.result?.bonusHint || checkin.retmsg || "")
-          .replace(/\n/g, " ")
-          .trim();
-
-        msgs.push(`签到：${hint || "成功"}`);
-      } else {
-        msgs.push(`签到：${checkin.retmsg || "失败"}`);
-      }
-    } catch (err) {
-      msgs.push(`签到异常：${err.message || String(err)}`);
-    }
-  } else {
-    msgs.push("签到：已关闭");
-  }
-
-  if (opts.enableVideo) {
-    for (let i = 1; i <= opts.maxVideo; i++) {
-      await sleep(i === 1 ? 1500 : opts.videoDelay);
-
-      try {
-        const video = await fetchApi(ctx, acc, "videoBonus");
-
-        if (video.retcode === 0) {
-          msgs.push(`视频${i}：+${video.result?.bonus ?? "?"} Coins`);
-        } else {
-          msgs.push(`视频${i}：${video.retmsg || "停止"}`);
-          break;
+        if (opts.enableCheckin) {
+            var d = await api('checkIn');
+            var m = "[签到] " + (d.retcode === 0 ? "成功" : d.retmsg);
+            console.log(label + " " + m);
+            logArr.push(m);
         }
-      } catch (err) {
-        msgs.push(`视频${i}异常：${err.message || String(err)}`);
-        break;
-      }
+        if (opts.enableVideo) {
+            for (var i = 1; i <= opts.maxVideo; i++) {
+                await new Promise(r => setTimeout(r, i === 1 ? 1000 : opts.videoDelay));
+                var d = await api('videoBonus');
+                var m = "[视频" + i + "] " + (d.retcode === 0 ? "+" + d.result.bonus : d.retmsg);
+                console.log(label + " " + m);
+                logArr.push(m);
+                if (d.retcode !== 0) break;
+            }
+        }
+    } catch (e) {
+        console.log(label + " 出错: " + e.message);
+        logArr.push("[错误] " + e.message);
     }
-  } else {
-    msgs.push("视频奖励：已关闭");
-  }
-
-  try {
-    const latest = await fetchApi(ctx, acc, "queryBalanceAndBonus");
-
-    if (latest.retcode === 0) {
-      msgs.push(`最新余额：${latest.result?.balance ?? "?"} Coins`);
-    }
-  } catch {}
-
-  return msgs.join("\n");
+    return logArr.join('\n');
 }
 
 export default async function (ctx) {
-  const env = ctx.env || {};
+    console.log("[WeTalk Task] 任务启动...");
+    if ((ctx.env.TASK_ENABLED || 'true') === 'false') return;
 
-  if (!boolEnv(env.TASK_ENABLED, true)) {
-    notify(ctx, "任务已关闭", "TASK_ENABLED=false，定时任务未执行。");
-    return;
-  }
-
-  const store = loadStore(ctx);
-  ctx.storage.setJSON(storeKey, store);
-
-  const runTokens = splitEnvList(env.RUN_ACCOUNTS || "");
-  const ids = matchAccountIds(store, runTokens);
-
-  if (!ids.length) {
-    notify(
-      ctx,
-      "未抓到任何账号",
-      "请先启用 MitM，打开 WeTalk 并触发 queryBalanceAndBonus 请求。"
-    );
-    return;
-  }
-
-  const opts = {
-    enableCheckin: boolEnv(env.ENABLE_CHECKIN, true),
-    enableVideo: boolEnv(env.ENABLE_VIDEO, true),
-    maxVideo: intEnv(env.MAX_VIDEO, 5, 1, 10),
-    videoDelay: intEnv(env.VIDEO_DELAY_MS, 8000, 1000, 60000),
-    accountGap: intEnv(env.ACCOUNT_GAP_MS, 3500, 0, 120000)
-  };
-
-  const results = [];
-
-  for (let i = 0; i < ids.length; i++) {
-    const id = ids[i];
-    results.push(await runAccount(ctx, store.accounts[id], i, ids.length, opts));
-
-    if (i < ids.length - 1) {
-      await sleep(opts.accountGap);
+    var store = ctx.storage.getJSON(STORE_KEY);
+    if (!store || !store.order.length) {
+        console.log("[WeTalk Task] 未发现已存储的账号");
+        ctx.notify({ title: 'WeTalk', body: '无可用账号' });
+        return;
     }
-  }
 
-  const body = results.join("\n\n").slice(0, 4000);
-  notify(ctx, `全部完成（${ids.length}个账号）`, body);
+    var opts = {
+        enableCheckin: (ctx.env.ENABLE_CHECKIN || 'true') !== 'false',
+        enableVideo: (ctx.env.ENABLE_VIDEO || 'true') !== 'false',
+        maxVideo: parseInt(ctx.env.MAX_VIDEO || '5'),
+        videoDelay: parseInt(ctx.env.VIDEO_DELAY_MS || '8000'),
+        accountGap: parseInt(ctx.env.ACCOUNT_GAP_MS || '3500')
+    };
+
+    var results = [];
+    for (var i = 0; i < store.order.length; i++) {
+        var res = await runAccount(ctx, store.accounts[store.order[i]], i, store.order.length, opts);
+        results.push(res);
+        if (i < store.order.length - 1) await new Promise(r => setTimeout(r, opts.accountGap));
+    }
+
+    console.log("[WeTalk Task] 任务完成。");
+    ctx.notify({ title: 'WeTalk 任务完成', body: results.join('\n---\n') });
 }
+
+英语
+k
+中文（简体）
+k
+
+扩展程序选项更多 »
