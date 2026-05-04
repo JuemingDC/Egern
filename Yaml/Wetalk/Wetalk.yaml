@@ -1,6 +1,7 @@
 name: "WeTalk 自动化签到+视频奖励"
 description: "WeTalk 抓取账号参数后，定时执行签到与视频奖励任务。支持多账号查看、指定运行和删除账号。"
 author: "TG@ZenMoFiShi, converted for Egern"
+icon: "checkmark.seal.fill"
 
 env_schema:
   RUN_ACCOUNTS:
@@ -21,32 +22,38 @@ env_schema:
       - "false"
       - "true"
 
-scriptings:
-  - http_request:
-      name: "WeTalk 参数抓取"
-      match: '^https://api\.wetalkapp\.com/app/queryBalanceAndBonus'
-      script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Wetalk/Wetalk_capture.js"
-      timeout: 10
-      update_interval: 0
-      env:
-        SHOW_SENSITIVE: "false"
-
-  - schedule:
-      name: "WeTalk 签到任务"
-      cron: "5 */6 * * *"
-      script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Wetalk/Wetalk_task.js"
-      timeout: 120
-      update_interval: 0
-      env:
-        RUN_ACCOUNTS: ""
-
-  - generic:
-      name: "WeTalk 账号管理"
-      script_url: "https://github.com/JuemingDC/Egern/raw/main/JavaScript/Wetalk/Wetalk_account_manger.js"
-      timeout: 30
-      update_interval: 0
-      
+  SHOW_SENSITIVE:
+    name: "显示敏感信息"
+    description: "设为 true 后，抓取通知中显示完整账号信息；默认隐藏部分信息。"
+    default_value: "false"
+    options:
+      - "false"
+      - "true"
 
 mitm:
   hostnames:
     - "api.wetalkapp.com"
+
+http_captures:
+  - "api.wetalkapp.com"
+
+scriptings:
+  - http_request:
+      name: "WeTalk 参数抓取"
+      match: "^https://api\\.wetalkapp\\.com/app/queryBalanceAndBonus"
+      script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/refs/heads/main/JavaScript/Wetalk/Wetalk_capture.js"
+      timeout: 10
+      update_interval: 0
+
+  - schedule:
+      name: "WeTalk 签到任务"
+      cron: "20 8,20 * * *"
+      script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/refs/heads/main/JavaScript/Wetalk/Wetalk_task.js"
+      timeout: 120
+      update_interval: 0
+
+  - generic:
+      name: "WeTalk 账号管理"
+      script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/refs/heads/main/JavaScript/Wetalk/Wetalk_account_manger.js"
+      timeout: 30
+      update_interval: 0
