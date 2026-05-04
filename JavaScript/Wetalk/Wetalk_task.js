@@ -156,9 +156,3 @@ export default async function (ctx) {
     ctx.notify({ title: 'WeTalk 任务完成', body: results.join('\n---\n') });
 }
 
-英语
-k
-中文（简体）
-k
-
-扩展程序选项更多 »
