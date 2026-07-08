@@ -1,369 +1,684 @@
-// 机场订阅小组件（Egern 严格 DSL 版 / Apple 液态玻璃风）
-// 环境变量：NAME1/URL1/RESET1 ... NAME8/URL8/RESET8
+// 机场订阅小组件（Egern 严格 DSL 版 / iOS 电量组件单圆环风格）
+// 环境变量：NAME1/URL1/RESET1/ICON1 ... NAME8/URL8/RESET8/ICON8
+// 图标逻辑：优先按 NAME 从 ICONS_JSON 自动匹配；未匹配时回退 ICONn；仍失败则显示名称缩写
+// ICONS_JSON 可选，默认：https://velvetcodeloom.github.io/icloud/icons.json
+// 设计更新时间：2026-07-08
+// 作者：chance
+// 分类：信息展示 / 订阅流量 Widget
+
+const DEFAULT_ICONS_JSON = "https://velvetcodeloom.github.io/icloud/icons.json";
+const MAX = 8;
+const REFRESH_MS = 60 * 60 * 1000;
 
 export default async function (ctx) {
-  const MAX = 8;
-  const slots = [];
+  const family = ctx.widgetFamily || "systemMedium";
+  const slots = readSlots(ctx);
+  const refreshAfter = new Date(Date.now() + REFRESH_MS).toISOString();
 
+  if (!slots.length) return buildEmptyWidget(refreshAfter);
+
+  const visibleSlots = slots.slice(0, getDisplayLimit(family, slots.length));
+  const catalog = await loadIconCatalog(ctx);
+
+  const results = await Promise.all(
+    visibleSlots.map(async (slot) => {
+      const [info, icon] = await Promise.all([
+        fetchInfo(ctx, slot),
+        resolveSlotIcon(ctx, slot, catalog),
+      ]);
+      return { ...info, icon };
+    })
+  );
+
+  if (family === "systemLarge" || family === "systemExtraLarge") {
+    return buildLargeWidget(results, refreshAfter);
+  }
+
+  return buildRingWidget(results, family, refreshAfter);
+}
+
+function readSlots(ctx) {
+  const slots = [];
   for (let i = 1; i <= MAX; i++) {
     const url = trim(ctx.env[`URL${i}`]);
     if (!url) continue;
     slots.push({
+      index: i,
       name: trim(ctx.env[`NAME${i}`]) || inferName(url),
       url,
       resetDay: parseResetDay(ctx.env[`RESET${i}`]),
+      manualIcon: trim(ctx.env[`ICON${i}`]),
     });
   }
-
-  const family = ctx.widgetFamily || "systemMedium";
-  const visibleSlots = slots.slice(0, getDisplayLimit(family, slots.length));
-  const style = getStyle(visibleSlots.length, family);
-  const refreshAfter = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-
-  if (!visibleSlots.length) {
-    return buildEmptyWidget(refreshAfter);
-  }
-
-  const results = await Promise.all(visibleSlots.map((slot) => fetchInfo(ctx, slot)));
-
-  return {
-    type: "widget",
-    padding: style.widgetPadding,
-    gap: style.widgetGap,
-    refreshAfter,
-    backgroundGradient: buildAppleBackground(),
-    children: [
-      buildHeader(style),
-      {
-        type: "stack",
-        direction: "column",
-        gap: style.listGap,
-        children: results.map((item, index) => buildRow(item, style, index, results.length)),
-      },
-    ],
-  };
+  return slots;
 }
 
-function buildAppleBackground() {
-  return {
-    type: "linear",
-    colors: [
-      { light: "#F9FBFF", dark: "#08111B" },
-      { light: "#F3F7FD", dark: "#0B1622" },
-      { light: "#EEF4FB", dark: "#102031" },
-      { light: "#F7F9FC", dark: "#15253A" },
-    ],
-    stops: [0, 0.34, 0.72, 1],
-    startPoint: { x: 0, y: 0 },
-    endPoint: { x: 1, y: 1 },
-  };
+function getDisplayLimit(family, count) {
+  if (family === "systemSmall") return Math.min(count, 1);
+  if (family === "systemMedium") return Math.min(count, 4);
+  if (family === "systemLarge") return Math.min(count, 4);
+  if (family === "systemExtraLarge") return Math.min(count, 6);
+  return Math.min(count, 1);
 }
 
 function buildEmptyWidget(refreshAfter) {
   return {
     type: "widget",
-    padding: [15, 15, 15, 15],
+    padding: 14,
     gap: 8,
     refreshAfter,
-    backgroundGradient: buildAppleBackground(),
+    backgroundColor: "#00000000",
     children: [
       {
         type: "text",
-        text: "订阅",
-        font: { size: "caption1", weight: "semibold" },
-        textColor: { light: "#76849A", dark: "#A2B1C6" },
+        text: "机场订阅",
+        font: { size: "headline", weight: "semibold" },
+        textColor: adaptive("#1C1C1E", "#F2F2F7"),
       },
       {
         type: "text",
-        text: "请配置 URL1 环境变量",
-        font: { size: "subheadline", weight: "semibold" },
-        textColor: { light: "#314255", dark: "#E5EDF7" },
-      },
-      {
-        type: "text",
-        text: "支持：NAME1/URL1/RESET1 ... NAME8/URL8/RESET8",
-        font: { size: "caption2" },
-        textColor: { light: "#7F8EA4", dark: "#91A1B8" },
-        maxLines: 2,
+        text: "请配置 URL1\n可选：NAME1 / RESET1 / ICON1",
+        font: { size: "caption1", weight: "medium" },
+        textColor: adaptive("#636366", "#AEAEB2"),
+        maxLines: 3,
         minScale: 0.8,
       },
     ],
   };
 }
 
-function buildHeader(style) {
+function buildRingWidget(items, family, refreshAfter) {
+  const small = family === "systemSmall";
+  const count = items.length;
+
+  const ringSize = small
+    ? 104
+    : count === 1
+      ? 110
+      : count === 2
+        ? 92
+        : count === 3
+          ? 80
+          : 68;
+
+  const percentFont = small
+    ? 30
+    : count === 1
+      ? 28
+      : count === 2
+        ? 24
+        : count === 3
+          ? 21
+          : 18;
+
+  const cells = items.map((item) =>
+    buildBatteryCell(item, ringSize, percentFont, small)
+  );
+
   return {
-    type: "stack",
-    direction: "row",
-    alignItems: "start",
-    children: [
-      {
-        type: "text",
-        text: "订阅",
-        font: { size: style.headerFont, weight: "semibold" },
-        textColor: { light: "#7C8A9E", dark: "#A5B4C8" },
-      },
-      { type: "spacer" },
-      {
-        type: "date",
-        date: new Date().toISOString(),
-        format: "time",
-        font: { size: style.metaFont, weight: "medium" },
-        textColor: { light: "#98A5B7", dark: "#8D9CB1" },
-      },
-    ],
+    type: "widget",
+    padding: small ? [10, 8, 8, 8] : [12, 10, 9, 10],
+    gap: 0,
+    refreshAfter,
+    backgroundColor: "#00000000",
+    children: small
+      ? [
+          { type: "spacer" },
+          {
+            type: "stack",
+            direction: "row",
+            alignItems: "center",
+            children: [
+              { type: "spacer" },
+              cells[0],
+              { type: "spacer" },
+            ],
+          },
+          { type: "spacer" },
+        ]
+      : [
+          { type: "spacer" },
+          {
+            type: "stack",
+            direction: "row",
+            alignItems: "center",
+            gap: count === 4 ? 4 : count === 3 ? 7 : 12,
+            children: cells,
+          },
+          { type: "spacer" },
+        ],
   };
 }
 
-function buildRow(item, style, index, total) {
-  if (item.error) {
-    return {
+function buildBatteryCell(item, ringSize, percentFont, small) {
+  const remaining = getRemainingPercent(item);
+
+  const cell = {
+    type: "stack",
+    direction: "column",
+    alignItems: "center",
+    gap: small ? 5 : 6,
+    children: [
+      {
+        type: "image",
+        src: buildRingSvg(item, ringSize),
+        width: ringSize,
+        height: ringSize,
+        resizeMode: "contain",
+      },
+      {
+        type: "text",
+        text: item.error ? "—" : formatPercent(remaining),
+        font: { size: percentFont, weight: "regular" },
+        textColor: item.error ? tertiaryText() : primaryText(),
+        textAlign: "center",
+        maxLines: 1,
+        minScale: 0.75,
+      },
+    ],
+  };
+
+  if (!small) cell.flex = 1;
+  return cell;
+}
+
+function buildRingSvg(item, size) {
+  const remaining = item.error ? 0 : getRemainingPercent(item);
+  const progressColor = getRingColor(remaining, item.error);
+  const trackColor = "#8E8E9352";
+  const strokeWidth = size >= 100 ? 10 : size >= 80 ? 9 : 8;
+  const radius = (size - strokeWidth) / 2;
+  const center = size / 2;
+  const iconBox = Math.round(size * 0.46);
+  const iconX = Math.round((size - iconBox) / 2);
+  const iconY = iconX;
+
+  let centerContent;
+
+  if (item.icon) {
+    centerContent = `<image href="${escapeXml(item.icon)}" x="${iconX}" y="${iconY}" width="${iconBox}" height="${iconBox}" preserveAspectRatio="xMidYMid meet" />`;
+  } else {
+    const initials = escapeXml(getInitials(item.name));
+    const fontSize = Math.max(13, Math.round(size * 0.23));
+    centerContent = `<text x="50%" y="52%" text-anchor="middle" dominant-baseline="middle" font-family="-apple-system,BlinkMacSystemFont,sans-serif" font-size="${fontSize}" font-weight="700" fill="${progressColor}">${initials}</text>`;
+  }
+
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  <circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="${trackColor}" stroke-width="${strokeWidth}" />
+  <circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="${progressColor}" stroke-width="${strokeWidth}" stroke-linecap="round" pathLength="100" stroke-dasharray="${remaining} ${100 - remaining}" transform="rotate(-90 ${center} ${center})" />
+  ${centerContent}
+</svg>`.trim();
+
+  return `data:image/svg+xml;base64,${utf8ToBase64(svg)}`;
+}
+
+function getRingColor(remaining, error) {
+  if (error) return "#8E8E93";
+  if (remaining <= 10) return "#FF453A";
+  if (remaining <= 20) return "#FFD60A";
+  return "#30D158";
+}
+
+function escapeXml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function buildLargeWidget(items, refreshAfter) {
+  return {
+    type: "widget",
+    padding: [12, 14, 12, 14],
+    gap: items.length >= 4 ? 7 : 10,
+    refreshAfter,
+    backgroundColor: "#00000000",
+    children: items.map((item, index) => buildLargeRow(item, index, items.length)),
+  };
+}
+
+function buildLargeRow(item, index, total) {
+  const remaining = getRemainingPercent(item);
+  const tone = getRemainingTone(remaining);
+  const meta = getMetaText(item);
+
+  const children = [
+    {
       type: "stack",
-      direction: "column",
-      gap: style.rowGap,
+      direction: "row",
+      alignItems: "center",
+      gap: 10,
       children: [
+        buildIdentity(item, 38, false, tone),
         {
           type: "stack",
-          direction: "row",
-          alignItems: "center",
-          gap: style.nameGap,
+          direction: "column",
+          flex: 1,
+          gap: 5,
           children: [
-            buildOrb({ light: "#D1D8E3", dark: "#A7B3C6" }, style),
             {
-              type: "text",
-              text: item.name,
-              flex: 1,
-              font: { size: style.nameFont, weight: "bold" },
-              textColor: { light: "#243446", dark: "#F1F5FA" },
-              maxLines: 1,
-              minScale: 0.72,
+              type: "stack",
+              direction: "row",
+              alignItems: "center",
+              gap: 8,
+              children: [
+                {
+                  type: "text",
+                  text: item.name,
+                  flex: 1,
+                  font: { size: "subheadline", weight: "bold" },
+                  textColor: primaryText(),
+                  maxLines: 1,
+                  minScale: 0.66,
+                },
+                {
+                  type: "text",
+                  text: item.error
+                    ? "获取失败"
+                    : `${bytesToSize(item.remainingBytes)} 剩余`,
+                  font: { size: "caption1", weight: "semibold" },
+                  textColor: item.error ? tertiaryText() : tone.color,
+                  maxLines: 1,
+                  minScale: 0.7,
+                },
+                {
+                  type: "text",
+                  text: meta.text,
+                  font: { size: "caption2", weight: "medium" },
+                  textColor: meta.color,
+                  maxLines: 1,
+                  minScale: 0.65,
+                },
+              ],
             },
+            buildRemainingBar(item, tone),
             {
-              type: "text",
-              text: "获取失败",
-              font: { size: style.infoFont, weight: "medium" },
-              textColor: { light: "#8B97A8", dark: "#A9B3C2" },
+              type: "stack",
+              direction: "row",
+              alignItems: "center",
+              children: [
+                {
+                  type: "text",
+                  text: item.error
+                    ? "—"
+                    : `已用 ${bytesToSize(item.used)} / 总量 ${bytesToSize(item.totalBytes)}`,
+                  flex: 1,
+                  font: { size: "caption2", weight: "medium" },
+                  textColor: secondaryText(),
+                  maxLines: 1,
+                  minScale: 0.68,
+                },
+                {
+                  type: "text",
+                  text: item.error ? "" : `剩余 ${formatPercent(remaining)}`,
+                  font: { size: "caption2", weight: "bold" },
+                  textColor: item.error ? tertiaryText() : tone.color,
+                },
+              ],
             },
           ],
         },
-        buildDivider(style, index, total),
       ],
-    };
-  }
+    },
+  ];
 
-  const tone = getUsageTone(item.percent);
-  const meta = getMetaText(item);
+  if (index !== total - 1) children.push(buildDivider());
 
   return {
     type: "stack",
     direction: "column",
-    gap: style.rowGap,
-    children: [
-      {
-        type: "stack",
-        direction: "row",
-        alignItems: "center",
-        gap: style.nameGap,
-        children: [
-          buildOrb(tone.dotColor, style),
-          {
-            type: "text",
-            text: item.name,
-            flex: 1,
-            font: { size: style.nameFont, weight: "bold" },
-            textColor: { light: "#233346", dark: "#F5F8FD" },
-            maxLines: 1,
-            minScale: 0.72,
-          },
-          {
-            type: "text",
-            text: `${item.percent.toFixed(1)}%`,
-            font: { size: style.percentFont, weight: "semibold" },
-            textColor: tone.percentColor,
-          },
-        ],
-      },
-      buildArtBar(item.percent, tone, style),
-      {
-        type: "stack",
-        direction: "row",
-        alignItems: "center",
-        children: [
-          {
-            type: "text",
-            text: `${bytesToSize(item.used)} / ${bytesToSize(item.totalBytes)}`,
-            flex: 1,
-            font: { size: style.infoFont, weight: "medium" },
-            textColor: { light: "#607084", dark: "#B0BDCD" },
-            maxLines: 1,
-            minScale: 0.72,
-          },
-          {
-            type: "text",
-            text: meta.text,
-            font: { size: style.metaFont, weight: "medium" },
-            textColor: meta.color,
-            maxLines: 1,
-            minScale: 0.72,
-          },
-        ],
-      },
-      buildDivider(style, index, total),
-    ],
+    gap: 7,
+    children,
   };
 }
 
-function buildOrb(color, style) {
-  return {
-    type: "stack",
-    width: style.dotBox,
-    height: style.dotBox,
-    alignItems: "center",
-    justifyContent: "center",
-    children: [
-      {
-        type: "stack",
-        width: style.dotSize,
-        height: style.dotSize,
-        backgroundGradient: {
-          type: "linear",
-          colors: [
-            { light: "#FFFFFFE6", dark: "#FFFFFF44" },
-            color,
-          ],
-          stops: [0, 1],
-          startPoint: { x: 0, y: 0 },
-          endPoint: { x: 1, y: 1 },
-        },
-        borderRadius: 99,
-        children: [],
-      },
-    ],
-  };
-}
+function buildRemainingBar(item, tone) {
+  const remaining = item.error ? 0 : getRemainingPercent(item);
+  const filled = Math.max(0.0001, remaining);
+  const empty = Math.max(0.0001, 100 - remaining);
 
-function buildDivider(style, index, total) {
-  if (index === total - 1) return { type: "spacer", length: 0 };
   return {
     type: "stack",
     direction: "row",
-    padding: [style.dividerTop, 0, 0, 0],
+    height: 7,
     children: [
       {
         type: "stack",
-        flex: 1,
-        height: 1,
+        flex: filled,
+        height: 7,
+        borderRadius: 999,
         backgroundGradient: {
           type: "linear",
-          colors: [
-            { light: "#FFFFFF00", dark: "#FFFFFF00" },
-            { light: "#D9E3EE70", dark: "#50627A44" },
-            { light: "#E8EEF670", dark: "#62758D30" },
-            { light: "#FFFFFF00", dark: "#FFFFFF00" },
-          ],
-          stops: [0, 0.22, 0.78, 1],
+          colors: tone.barColors,
+          stops: [0, 1],
           startPoint: { x: 0, y: 0 },
           endPoint: { x: 1, y: 0 },
         },
-        borderRadius: 99,
+        children: [],
+      },
+      {
+        type: "stack",
+        flex: empty,
+        height: 7,
+        borderRadius: 999,
+        backgroundColor: trackColor(),
         children: [],
       },
     ],
   };
 }
 
-function buildArtBar(percent, tone, style) {
-  const clamped = clamp(percent, 0, 100);
-  const filled = Math.max(0.0001, clamped);
-  const empty = Math.max(0.0001, 100 - clamped);
-
+function buildDivider() {
   return {
     type: "stack",
-    direction: "column",
-    gap: style.barGap,
+    height: 1,
+    backgroundColor: adaptive("#8E8E9326", "#8E8E9338"),
+    children: [],
+  };
+}
+
+function buildIdentity(item, size, circular, tone) {
+  if (item.icon) {
+    return {
+      type: "image",
+      src: item.icon,
+      width: size,
+      height: size,
+      resizeMode: "cover",
+      borderRadius: circular ? 999 : Math.round(size * 0.24),
+    };
+  }
+
+  const initials = getInitials(item.name);
+  return {
+    type: "stack",
+    width: size,
+    height: size,
+    borderRadius: circular ? 999 : Math.round(size * 0.24),
+    alignItems: "center",
+    backgroundColor: tone.softColor,
     children: [
+      { type: "spacer" },
       {
-        type: "stack",
-        direction: "row",
-        children: [
-          {
-            type: "stack",
-            flex: filled,
-            height: style.sheenHeight,
-            backgroundGradient: {
-              type: "linear",
-              colors: tone.sheenColors,
-              stops: [0, 0.5, 1],
-              startPoint: { x: 0, y: 0 },
-              endPoint: { x: 1, y: 0 },
-            },
-            borderRadius: 99,
-            children: [],
-          },
-          {
-            type: "stack",
-            flex: empty,
-            height: style.sheenHeight,
-            backgroundColor: { light: "#FFFFFF20", dark: "#FFFFFF08" },
-            borderRadius: 99,
-            children: [],
-          },
-        ],
+        type: "text",
+        text: initials,
+        font: { size: Math.max(11, Math.round(size * 0.38)), weight: "bold" },
+        textColor: tone.color,
+        maxLines: 1,
+        minScale: 0.6,
       },
-      {
-        type: "stack",
-        direction: "row",
-        children: [
-          {
-            type: "stack",
-            flex: filled,
-            height: style.barHeight,
-            backgroundGradient: {
-              type: "linear",
-              colors: tone.barColors,
-              stops: [0, 0.42, 1],
-              startPoint: { x: 0, y: 0 },
-              endPoint: { x: 1, y: 0 },
-            },
-            borderRadius: 99,
-            children: [
-              {
-                type: "stack",
-                direction: "row",
-                children: [
-                  {
-                    type: "stack",
-                    flex: Math.max(1, Math.round(filled * 0.2)),
-                    height: style.barHeight,
-                    backgroundColor: { light: "#FFFFFF55", dark: "#FFFFFF18" },
-                    borderRadius: 99,
-                    children: [],
-                  },
-                  { type: "spacer" },
-                ],
-              },
-            ],
-          },
-          {
-            type: "stack",
-            flex: empty,
-            height: style.barHeight,
-            backgroundGradient: {
-              type: "linear",
-              colors: [
-                { light: "#FFFFFF70", dark: "#1A273666" },
-                { light: "#E7EDF540", dark: "#24364755" },
-              ],
-              startPoint: { x: 0, y: 0 },
-              endPoint: { x: 1, y: 0 },
-            },
-            borderRadius: 99,
-            children: [],
-          },
-        ],
-      },
+      { type: "spacer" },
     ],
   };
+}
+
+function centeredRow(child) {
+  return {
+    type: "stack",
+    direction: "row",
+    alignItems: "center",
+    children: [{ type: "spacer" }, child, { type: "spacer" }],
+  };
+}
+
+async function loadIconCatalog(ctx) {
+  const url = trim(ctx.env.ICONS_JSON) || DEFAULT_ICONS_JSON;
+  const cacheKey = `airport-icons-json:${url}`;
+
+  try {
+    const response = await ctx.http.get(url, {
+      timeout: 15000,
+      redirect: "follow",
+      credentials: "omit",
+    });
+    const json = await response.json();
+    try {
+      ctx.storage.set(cacheKey, JSON.stringify(json));
+    } catch (e) {}
+    return normalizeIconCatalog(json, url);
+  } catch (e) {
+    try {
+      const cached = ctx.storage.get(cacheKey);
+      if (cached) return normalizeIconCatalog(JSON.parse(cached), url);
+    } catch (e2) {}
+    return [];
+  }
+}
+
+async function resolveSlotIcon(ctx, slot, catalog) {
+  const matched = findBestIcon(slot.name, catalog);
+  if (matched) {
+    const source = await resolveImageSource(ctx, matched.src);
+    if (source) return source;
+  }
+
+  if (slot.manualIcon) {
+    const source = await resolveImageSource(ctx, slot.manualIcon);
+    if (source) return source;
+  }
+
+  return null;
+}
+
+function normalizeIconCatalog(raw, baseUrl) {
+  const entries = [];
+  collectIconEntries(raw, [], entries, 0, baseUrl);
+
+  const unique = [];
+  const seen = new Set();
+  for (const entry of entries) {
+    const name = trim(entry.name);
+    const src = trim(entry.src);
+    if (!name || !src) continue;
+    const key = `${normalizeName(name)}|${src}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push({ name, src });
+  }
+  return unique;
+}
+
+function collectIconEntries(value, trail, out, depth, baseUrl) {
+  if (depth > 7 || value == null) return;
+
+  if (typeof value === "string") {
+    if (looksLikeImageSource(value) && trail.length) {
+      out.push({ name: trail[trail.length - 1], src: resolveRelativeUrl(value, baseUrl) });
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) collectIconEntries(item, trail, out, depth + 1, baseUrl);
+    return;
+  }
+
+  if (typeof value !== "object") return;
+
+  const src = pickFirstString(value, [
+    "icon", "iconUrl", "iconURL", "icon_url", "src", "image", "imageUrl", "imageURL", "url", "download_url",
+  ]);
+
+  const names = [];
+  for (const key of ["name", "title", "label", "airport", "provider", "displayName", "key", "id"]) {
+    if (typeof value[key] === "string" && value[key].trim()) names.push(value[key].trim());
+  }
+  for (const key of ["alias", "aliases", "keywords"]) {
+    const v = value[key];
+    if (typeof v === "string") names.push(v);
+    else if (Array.isArray(v)) names.push(...v.filter((x) => typeof x === "string"));
+  }
+
+  if (src && looksLikeImageSource(src)) {
+    const finalNames = names.length ? names : trail.length ? [trail[trail.length - 1]] : [];
+    for (const name of finalNames) {
+      out.push({ name, src: resolveRelativeUrl(src, baseUrl) });
+    }
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    if (typeof child === "string" && looksLikeImageSource(child)) {
+      out.push({ name: key, src: resolveRelativeUrl(child, baseUrl) });
+    } else if (child && typeof child === "object") {
+      collectIconEntries(child, trail.concat(key), out, depth + 1, baseUrl);
+    }
+  }
+}
+
+function findBestIcon(name, catalog) {
+  const target = normalizeName(name);
+  if (!target || !catalog.length) return null;
+
+  let best = null;
+  let bestScore = 0;
+
+  for (const entry of catalog) {
+    const candidate = normalizeName(entry.name);
+    if (!candidate) continue;
+
+    let score = 0;
+    if (candidate === target) {
+      score = 1000;
+    } else if (candidate.length >= 3 && target.includes(candidate)) {
+      score = 700 + candidate.length;
+    } else if (target.length >= 3 && candidate.includes(target)) {
+      score = 650 + target.length;
+    } else {
+      const a = stripGenericWords(target);
+      const b = stripGenericWords(candidate);
+      if (a && b && a === b) score = 900;
+      else if (a.length >= 3 && b.length >= 3 && (a.includes(b) || b.includes(a))) {
+        score = 500 + Math.min(a.length, b.length);
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = entry;
+    }
+  }
+
+  return bestScore >= 500 ? best : null;
+}
+
+async function resolveImageSource(ctx, source) {
+  const value = trim(source);
+  if (!value) return null;
+  if (value.startsWith("data:") || value.startsWith("sf-symbol:")) return value;
+  if (!/^https?:\/\//i.test(value)) return null;
+
+  const cacheKey = `airport-icon-data:${value}`;
+  try {
+    const cached = ctx.storage.get(cacheKey);
+    if (cached && cached.startsWith("data:")) return cached;
+  } catch (e) {}
+
+  try {
+    const response = await ctx.http.get(value, {
+      timeout: 15000,
+      redirect: "follow",
+      credentials: "omit",
+    });
+    const buffer = await response.arrayBuffer();
+    const mime = normalizeMime(response.headers.get("content-type"), value);
+    const dataUri = `data:${mime};base64,${arrayBufferToBase64(buffer)}`;
+    try {
+      ctx.storage.set(cacheKey, dataUri);
+    } catch (e) {}
+    return dataUri;
+  } catch (e) {
+    return null;
+  }
+}
+
+function utf8ToBase64(value) {
+  const bytes = [];
+  const text = unescape(encodeURIComponent(String(value)));
+
+  for (let i = 0; i < text.length; i++) {
+    bytes.push(text.charCodeAt(i));
+  }
+
+  return bytesToBase64(bytes);
+}
+
+function bytesToBase64(bytes) {
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
+    "abcdefghijklmnopqrstuvwxyz" +
+    "0123456789+/";
+
+  let output = "";
+
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i];
+    const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
+    const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    const triple = (a << 16) | (b << 8) | c;
+
+    output += chars[(triple >> 18) & 63];
+    output += chars[(triple >> 12) & 63];
+    output += i + 1 < bytes.length ? chars[(triple >> 6) & 63] : "=";
+    output += i + 2 < bytes.length ? chars[triple & 63] : "=";
+  }
+
+  return output;
+}
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let output = "";
+
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i];
+    const b = i + 1 < bytes.length ? bytes[i + 1] : 0;
+    const c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    const triple = (a << 16) | (b << 8) | c;
+
+    output += chars[(triple >> 18) & 63];
+    output += chars[(triple >> 12) & 63];
+    output += i + 1 < bytes.length ? chars[(triple >> 6) & 63] : "=";
+    output += i + 2 < bytes.length ? chars[triple & 63] : "=";
+  }
+
+  return output;
+}
+
+function normalizeMime(contentType, url) {
+  const mime = trim(contentType).split(";")[0].toLowerCase();
+  if (mime.startsWith("image/")) return mime;
+  if (/\.svg(?:\?|#|$)/i.test(url)) return "image/svg+xml";
+  if (/\.webp(?:\?|#|$)/i.test(url)) return "image/webp";
+  if (/\.jpe?g(?:\?|#|$)/i.test(url)) return "image/jpeg";
+  if (/\.gif(?:\?|#|$)/i.test(url)) return "image/gif";
+  return "image/png";
+}
+
+function looksLikeImageSource(value) {
+  const v = trim(value);
+  return /^(?:https?:\/\/|data:image\/|sf-symbol:)/i.test(v) || /\.(?:png|jpe?g|webp|gif|svg)(?:\?|#|$)/i.test(v);
+}
+
+function resolveRelativeUrl(value, baseUrl) {
+  const v = trim(value);
+  if (!v || /^(?:https?:\/\/|data:|sf-symbol:)/i.test(v)) return v;
+
+  const originMatch = String(baseUrl).match(/^(https?:\/\/[^/]+)/i);
+  if (v.startsWith("/") && originMatch) return originMatch[1] + v;
+
+  const base = String(baseUrl).replace(/[^/]*(?:\?.*)?$/, "");
+  return base + v.replace(/^\.\//, "");
+}
+
+function pickFirstString(object, keys) {
+  for (const key of keys) {
+    if (typeof object[key] === "string" && object[key].trim()) return object[key].trim();
+  }
+  return "";
 }
 
 async function fetchInfo(ctx, slot) {
@@ -387,14 +702,14 @@ async function fetchInfo(ctx, slot) {
 
           const used = (info.upload || 0) + (info.download || 0);
           const totalBytes = info.total || 0;
-          const percent = totalBytes > 0 ? (used / totalBytes) * 100 : 0;
+          const remainingBytes = Math.max(0, totalBytes - used);
 
           return {
             name: slot.name,
             error: false,
             used,
             totalBytes,
-            percent,
+            remainingBytes,
             expire: info.expire || null,
             remainDays: slot.resetDay ? getRemainingDays(slot.resetDay) : null,
           };
@@ -408,7 +723,7 @@ async function fetchInfo(ctx, slot) {
     error: true,
     used: 0,
     totalBytes: 0,
-    percent: 0,
+    remainingBytes: 0,
     expire: null,
     remainDays: slot.resetDay ? getRemainingDays(slot.resetDay) : null,
   };
@@ -438,7 +753,7 @@ function buildVariants(url) {
 }
 
 function withParam(url, key, value) {
-  return `${url}${url.indexOf("?") >= 0 ? "&" : "?"}${key}=${encodeURIComponent(value)}`;
+  return `${url}${url.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(value)}`;
 }
 
 function parseUserInfo(header) {
@@ -454,166 +769,99 @@ function parseUserInfo(header) {
   return result;
 }
 
-function getDisplayLimit(family, count) {
-  if (family === "systemMedium") return Math.min(count, 2);
-  if (family === "systemLarge") return Math.min(count, 4);
-  return count;
+function getRemainingPercent(item) {
+  if (!item || item.error || item.totalBytes <= 0) return 0;
+  return clamp((item.remainingBytes / item.totalBytes) * 100, 0, 100);
 }
 
-function getStyle(count, family) {
-  const compact = family === "systemSmall" || family === "accessoryRectangular";
-  const medium = family === "systemMedium";
-  const large = family === "systemLarge";
-  const dense = count >= 5;
-  const veryDense = count >= 7;
-
-  if (medium) {
+function getRemainingTone(remaining) {
+  if (remaining <= 10) {
     return {
-      widgetPadding: [12, 14, 12, 14],
-      widgetGap: 6,
-      listGap: 8,
-      rowGap: 3,
-      dividerTop: 5,
-      headerFont: "caption1",
-      metaFont: "caption2",
-      nameFont: "subheadline",
-      infoFont: "caption2",
-      percentFont: "caption1",
-      nameGap: 6,
-      dotBox: 10,
-      dotSize: 5,
-      barGap: 2,
-      sheenHeight: 1,
-      barHeight: 5,
+      color: adaptive("#FF3B30", "#FF453A"),
+      softColor: adaptive("#FF3B3020", "#FF453A30"),
+      barColors: [adaptive("#FF6961", "#FF6961"), adaptive("#FF3B30", "#FF453A")],
     };
   }
 
-  if (large) {
+  if (remaining <= 20) {
     return {
-      widgetPadding: [14, 15, 14, 15],
-      widgetGap: 8,
-      listGap: 9,
-      rowGap: 4,
-      dividerTop: 6,
-      headerFont: "caption1",
-      metaFont: "caption1",
-      nameFont: "subheadline",
-      infoFont: "caption1",
-      percentFont: "caption1",
-      nameGap: 6,
-      dotBox: 10,
-      dotSize: 5,
-      barGap: 2,
-      sheenHeight: 2,
-      barHeight: 5,
+      color: adaptive("#FF9F0A", "#FFD60A"),
+      softColor: adaptive("#FF9F0A20", "#FFD60A28"),
+      barColors: [adaptive("#FFC34D", "#FFE06B"), adaptive("#FF9F0A", "#FFD60A")],
     };
   }
 
   return {
-    widgetPadding: compact ? [11, 12, 11, 12] : dense ? [12, 13, 12, 13] : [13, 14, 13, 14],
-    widgetGap: compact ? 6 : 7,
-    listGap: veryDense ? 5 : dense ? 7 : 9,
-    rowGap: veryDense ? 3 : 4,
-    dividerTop: veryDense ? 4 : 6,
-    headerFont: compact ? "caption2" : "caption1",
-    metaFont: veryDense ? "caption2" : "caption1",
-    nameFont: veryDense ? "caption1" : dense ? "subheadline" : "headline",
-    infoFont: veryDense ? "caption2" : "caption1",
-    percentFont: veryDense ? "caption2" : dense ? "caption1" : "subheadline",
-    nameGap: veryDense ? 4 : 6,
-    dotBox: veryDense ? 8 : 10,
-    dotSize: veryDense ? 4 : 5,
-    barGap: 2,
-    sheenHeight: veryDense ? 1 : 2,
-    barHeight: veryDense ? 4 : dense ? 5 : 6,
-  };
-}
-
-function getUsageTone(percent) {
-  if (percent >= 90) {
-    return {
-      dotColor: { light: "#D1908A", dark: "#F1AAA3" },
-      percentColor: { light: "#A56A64", dark: "#F3B8B0" },
-      sheenColors: [
-        { light: "#FFE9E5", dark: "#FFAA9A2A" },
-        { light: "#EFC2B9", dark: "#F59C8C66" },
-        { light: "#D38980", dark: "#D98D84AA" },
-      ],
-      barColors: [
-        { light: "#F0D4CF", dark: "#875B58" },
-        { light: "#E1B0A8", dark: "#B07870" },
-        { light: "#C9837B", dark: "#D68F87" },
-      ],
-    };
-  }
-
-  if (percent >= 70) {
-    return {
-      dotColor: { light: "#D3B07E", dark: "#E6C18A" },
-      percentColor: { light: "#9A7A4B", dark: "#EEC88F" },
-      sheenColors: [
-        { light: "#FFF2DE", dark: "#E6C18A2A" },
-        { light: "#EBCB9B", dark: "#D9A95D66" },
-        { light: "#CB9F67", dark: "#CC965AAA" },
-      ],
-      barColors: [
-        { light: "#F2DFC0", dark: "#82653F" },
-        { light: "#DFB97F", dark: "#A77A45" },
-        { light: "#C9965A", dark: "#CA9657" },
-      ],
-    };
-  }
-
-  return {
-    dotColor: { light: "#95AEC9", dark: "#A9C8E7" },
-    percentColor: { light: "#6B7F96", dark: "#C6DCF3" },
-    sheenColors: [
-      { light: "#EEF6FE", dark: "#7EA6CF20" },
-      { light: "#CADBEB", dark: "#7EA9D244" },
-      { light: "#9FBFDC", dark: "#8DB2D699" },
-    ],
-    barColors: [
-      { light: "#E5EEF7", dark: "#465D75" },
-      { light: "#C4D4E4", dark: "#6683A0" },
-      { light: "#98B7D4", dark: "#8DB2D6" },
-    ],
+    color: adaptive("#34C759", "#30D158"),
+    softColor: adaptive("#34C75920", "#30D15828"),
+    barColors: [adaptive("#63D879", "#5DE06F"), adaptive("#34C759", "#30D158")],
   };
 }
 
 function getMetaText(item) {
   if (item.expire) {
     const daysLeft = Math.ceil((normalizeExpire(item.expire) - Date.now()) / 86400000);
-    if (daysLeft < 0) {
-      return {
-        text: "已到期",
-        color: { light: "#9DA8B7", dark: "#B8C2CE" },
-      };
-    }
+    if (daysLeft < 0) return { text: "已到期", color: tertiaryText() };
     if (daysLeft <= 7) {
-      return {
-        text: `${daysLeft}天后到期`,
-        color: { light: "#96724E", dark: "#D7B387" },
-      };
+      return { text: `${daysLeft}天到期`, color: adaptive("#FF9F0A", "#FFD60A") };
     }
-    return {
-      text: formatDate(item.expire),
-      color: { light: "#92A0B3", dark: "#97A6BA" },
-    };
+    return { text: formatDate(item.expire), color: tertiaryText() };
   }
 
   if (item.remainDays !== null) {
     return {
       text: `${item.remainDays}天重置`,
-      color: item.remainDays <= 3
-        ? { light: "#96724E", dark: "#D7B387" }
-        : { light: "#92A0B3", dark: "#97A6BA" },
+      color: item.remainDays <= 3 ? adaptive("#FF9F0A", "#FFD60A") : tertiaryText(),
     };
   }
 
-  return {
-    text: "",
-    color: { light: "#92A0B3", dark: "#97A6BA" },
-  };
+  return { text: "", color: tertiaryText() };
+}
+
+function getInitials(name) {
+  const clean = String(name || "").trim();
+  if (!clean) return "?";
+
+  const latin = clean.match(/[A-Za-z0-9]+/g);
+  if (latin && latin.length >= 2) return (latin[0][0] + latin[1][0]).toUpperCase();
+  if (latin && latin.length === 1) return latin[0].slice(0, 2).toUpperCase();
+
+  const chars = Array.from(clean.replace(/[\s\p{P}\p{S}]/gu, ""));
+  return chars.slice(0, 2).join("") || "?";
+}
+
+function normalizeName(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function stripGenericWords(value) {
+  return String(value || "")
+    .replace(/(?:机场|订阅|加速器|网络|vpn|proxy|network|cloud|service|services)/gi, "")
+    .trim();
+}
+
+function adaptive(light, dark) {
+  return { light, dark };
+}
+
+function primaryText() {
+  return adaptive("#1C1C1E", "#F2F2F7");
+}
+
+function secondaryText() {
+  return adaptive("#636366", "#AEAEB2");
+}
+
+function tertiaryText() {
+  return adaptive("#8E8E93", "#8E8E93");
+}
+
+function trackColor() {
+  return adaptive("#78788029", "#EBEBF52E");
 }
 
 function bytesToSize(bytes) {
@@ -621,7 +869,12 @@ function bytesToSize(bytes) {
   const units = ["B", "KB", "MB", "GB", "TB"];
   const power = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const value = bytes / Math.pow(1024, power);
-  return `${value.toFixed(power === 0 ? 0 : value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${units[power]}`;
+  const digits = power === 0 ? 0 : value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(digits)} ${units[power]}`;
+}
+
+function formatPercent(value) {
+  return `${value >= 99.95 ? "100" : value.toFixed(value >= 10 ? 0 : 1)}%`;
 }
 
 function formatDate(ts) {
@@ -644,8 +897,7 @@ function getRemainingDays(resetDay) {
 
 function parseResetDay(value) {
   const n = parseInt(value || "", 10);
-  if (!Number.isFinite(n)) return null;
-  if (n < 1 || n > 31) return null;
+  if (!Number.isFinite(n) || n < 1 || n > 31) return null;
   return n;
 }
 
