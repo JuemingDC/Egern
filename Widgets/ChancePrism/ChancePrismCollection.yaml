@@ -1,0 +1,95 @@
+# Chance Prism Widget Collection
+# Author: Chance
+# GitHub:
+# https://raw.githubusercontent.com/JuemingDC/Egern/main/Widgets/Chance-Prism/
+
+name: Chance Prism
+description: SVG 数据可视化小组件合集
+author: Chance
+
+# =========================
+# 环境变量
+# =========================
+env_schema:
+
+  # ----- 通用 -----
+  REFRESH_MIN:
+    name: 刷新间隔(分钟)
+    default_value: "30"
+
+  # ----- 油价 -----
+  region:
+    name: 油价地区
+    default_value: hainan/haikou
+  SHOW_TREND:
+    name: 显示调价趋势
+    default_value: "true"
+
+  # ----- 倒计时 -----
+  TITLE:
+    name: 标题
+    default_value: 任务倒计时
+  NAME1:
+    name: 任务1名称
+  DATE1:
+    name: 任务1日期
+    description: YYYY-MM-DD
+  DETAIL1:
+    name: 任务1说明
+
+  # ----- 图标优先级 -----
+  # 1. 离歌图标库（自动）
+  # 2. fmz200 兼容图标目录（可选）
+  # 3. Qure 语义图标（自动回退）
+  FMZ_ICON_CATALOG:https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/icons-all.json
+    
+  # ----- 机场订阅 -----
+  SUB_URL1:
+    name: 订阅1
+  SUB_NAME1:
+    name: 名称(可选)
+  ICON_SLUG1:
+    name: 图标Slug(可选)
+
+# =========================
+# GitHub RAW 预留
+# =========================
+
+scriptings:
+
+  - generic:
+      name: chance-network
+      script_url: https://raw.githubusercontent.com/JuemingDC/Egern/main/Widgets/Chance-Prism/NetWork.js
+
+  - generic:
+      name: chance-oil
+      script_url: https://raw.githubusercontent.com/JuemingDC/Egern/main/Widgets/Chance-Prism/OilPrice.js
+
+  - generic:
+      name: chance-countdown
+      script_url: https://raw.githubusercontent.com/JuemingDC/Egern/main/Widgets/Chance-Prism/CountDown.js
+
+  - generic:
+      name: chance-calendar
+      script_url: https://raw.githubusercontent.com/JuemingDC/Egern/main/Widgets/Chance-Prism/MyDay.js
+
+  - generic:
+      name: chance-subscription
+      script_url: https://raw.githubusercontent.com/JuemingDC/Egern/main/Widgets/Chance-Prism/Sub.js
+
+widgets:
+
+  - name: 网络信息
+    script_name: chance-network
+
+  - name: 实时油价
+    script_name: chance-oil
+
+  - name: 任务倒计时
+    script_name: chance-countdown
+
+  - name: 节日黄历
+    script_name: chance-calendar
+
+  - name: 机场订阅
+    script_name: chance-subscription
