@@ -1,7 +1,103 @@
 # Chance Prism Widget Collection
 # Author: Chance
-# GitHub Raw:
+#
+# GitHub Raw 目录：
 # https://raw.githubusercontent.com/JuemingDC/Egern/main/Widgets/ChancePrism/
+#
+# ============================================================
+# 模块环境变量
+# ============================================================
+#
+# 导入模块后，打开：
+# Egern → 工具 → 模块 → Chance Prism → Env
+#
+# 按需要添加以下键值对。
+#
+# -------------------------
+# 通用
+# -------------------------
+#
+# REFRESH_MIN
+# 刷新间隔，单位为分钟。
+# 示例：
+# REFRESH_MIN = 30
+#
+# -------------------------
+# 实时油价
+# -------------------------
+#
+# region
+# 油价地区路径。
+# 示例：
+# region = hainan/haikou
+#
+# SHOW_TREND
+# 是否显示调价趋势。
+# 可选值：
+# SHOW_TREND = true
+# SHOW_TREND = false
+#
+# -------------------------
+# 任务倒计时
+# -------------------------
+#
+# TITLE
+# 小组件标题。
+# 示例：
+# TITLE = 任务倒计时
+#
+# NAME1
+# 第一个任务名称。
+#
+# DATE1
+# 第一个任务日期，格式为 YYYY-MM-DD。
+#
+# DETAIL1
+# 第一个任务说明。
+#
+# 后续任务依次使用：
+# NAME2 / DATE2 / DETAIL2
+# NAME3 / DATE3 / DETAIL3
+# ...
+# NAME20 / DATE20 / DETAIL20
+#
+# -------------------------
+# 机场订阅
+# -------------------------
+#
+# SUB_URL1
+# 第一个机场订阅地址。
+#
+# SUB_NAME1
+# 第一个机场名称，可选。
+# 留空时脚本尝试从响应头或订阅域名自动识别。
+#
+# ICON_SLUG1
+# 第一个机场图标关键词或图标名称，可选。
+# 留空时脚本自动匹配。
+#
+# 后续机场依次使用：
+# SUB_URL2 / SUB_NAME2 / ICON_SLUG2
+# SUB_URL3 / SUB_NAME3 / ICON_SLUG3
+# ...
+# SUB_URL8 / SUB_NAME8 / ICON_SLUG8
+#
+# FMZ_ICON_CATALOG
+# fmz200 图标目录 JSON 地址，可选。
+# 示例：
+# FMZ_ICON_CATALOG = https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/icons-all.json
+#
+# 图标匹配优先级：
+# 1. 离歌图标库
+# 2. fmz200 图标目录
+# 3. Qure 图标库
+# 4. 脚本动态生成的 SVG 后备图标
+#
+# USER_AGENT
+# 请求机场订阅时使用的 User-Agent，可选。
+# 默认由脚本使用 Quantumult X。
+#
+# ============================================================
 
 name: "Chance Prism"
 description: "SVG 数据可视化小组件合集"
@@ -9,93 +105,45 @@ author: "Chance"
 
 scriptings:
 
-  # =========================
+  # -------------------------
   # 网络信息
-  # =========================
+  # -------------------------
   - generic:
       name: "chance-network"
       script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/main/Widgets/ChancePrism/NetWork.js"
       timeout: 25
-      env:
-        REFRESH_MIN: "30"
 
-  # =========================
+  # -------------------------
   # 实时油价
-  # =========================
+  # -------------------------
   - generic:
       name: "chance-oil"
       script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/main/Widgets/ChancePrism/OilPrice.js"
       timeout: 25
-      env:
-        REFRESH_MIN: "30"
-        region: "yunnan/kunming"
-        SHOW_TREND: "true"
 
-  # =========================
+  # -------------------------
   # 任务倒计时
-  # =========================
+  # -------------------------
   - generic:
       name: "chance-countdown"
       script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/main/Widgets/ChancePrism/CountDown.js"
       timeout: 20
-      env:
-        REFRESH_MIN: "30"
-        TITLE: "任务倒计时"
 
-        NAME1: ""
-        DATE1: ""
-        DETAIL1: ""
-
-        NAME2: ""
-        DATE2: ""
-        DETAIL2: ""
-
-        NAME3: ""
-        DATE3: ""
-        DETAIL3: ""
-
-  # =========================
+  # -------------------------
   # 节日黄历
-  # =========================
+  # -------------------------
   - generic:
       name: "chance-calendar"
       script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/main/Widgets/ChancePrism/MyDay.js"
       timeout: 20
-      env:
-        REFRESH_MIN: "60"
 
-  # =========================
+  # -------------------------
   # 机场订阅
-  #
-  # 图标优先级：
-  # 1. 离歌图标库
-  # 2. fmz200 图标目录
-  # 3. Qure 图标库
-  # 4. 脚本生成的 SVG 后备图标
-  # =========================
+  # -------------------------
   - generic:
       name: "chance-subscription"
       script_url: "https://raw.githubusercontent.com/JuemingDC/Egern/main/Widgets/ChancePrism/Sub.js"
       timeout: 30
-      env:
-        REFRESH_MIN: "30"
-        FMZ_ICON_CATALOG: "https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/icons-all.json"
-
-        SUB_URL1: ""
-        SUB_NAME1: ""
-        ICON_SLUG1: ""
-
-        SUB_URL2: ""
-        SUB_NAME2: ""
-        ICON_SLUG2: ""
-
-        SUB_URL3: ""
-        SUB_NAME3: ""
-        ICON_SLUG3: ""
-
-        SUB_URL4: ""
-        SUB_NAME4: ""
-        ICON_SLUG4: ""
 
 widgets:
 
