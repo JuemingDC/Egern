@@ -1,243 +1,578 @@
-/**
- * 今日油价 · Egern Widget
- * 重构：Chance
- * 数据源：http://m.qiyoujiage.com/
+/*
+ * name: 今日油价
+ * author: chance
+ * category: 生活信息 / 油价
+ * converted: 2026-07-15
+ * target: Egern
+ * version: 1.3.0
+ *
+ * 设计说明：
+ * - 删除“调价日、调价倒计时、调价窗口”等未经稳定数据源确认的信息。
+ * - systemLarge 删除重复的默认油号大卡片。
+ * - 四种油价采用等高纵向列表并按比例放大，底部保留本轮调整。
+ * - 数据范围改为城市级，默认城市为昆明，可通过 CITY 环境变量切换。
+ * - systemMedium、systemSmall 与锁屏布局保持不变。
+ *
+ * 环境变量：
+ * CITY=昆明
+ * DEFAULT_GRADE=95
+ * PRICE_92=7.58
+ * PRICE_95=8.12
+ * PRICE_98=8.76
+ * PRICE_0=7.18
+ * CHANGE=0.15
+ * HISTORY_92=7.50|7.52|7.55|7.58
+ * HISTORY_95=8.02|8.05|8.08|8.12
+ * HISTORY_98=8.64|8.68|8.72|8.76
+ * HISTORY_0=7.10|7.12|7.15|7.18
+ * API_URL=
+ *
+ * API JSON 示例：
+ * {
+ *   "city": "昆明",
+ *   "prices": {"92": 7.58, "95": 8.12, "98": 8.76, "0": 7.18},
+ *   "change": 0.15,
+ *   "history": {
+ *     "92": [7.50, 7.52, 7.55, 7.58],
+ *     "95": [8.02, 8.05, 8.08, 8.12],
+ *     "98": [8.64, 8.68, 8.72, 8.76],
+ *     "0":  [7.10, 7.12, 7.15, 7.18]
+ *   }
+ * }
+ *
+ * 也支持多城市结构：
+ * {
+ *   "cities": {
+ *     "昆明": {
+ *       "prices": {"92": 7.58, "95": 8.12, "98": 8.76, "0": 7.18},
+ *       "change": 0.00
+ *     }
+ *   }
+ * }
  */
 
 export default async function (ctx) {
-  const env = ctx.env || {};
   const family = ctx.widgetFamily || "systemMedium";
-  const isLarge = family === "systemLarge" || family === "systemExtraLarge";
-  const region = String(env.region || env.REGION || "hainan/haikou").trim();
-  const showTrend = String(env.SHOW_TREND || "true").toLowerCase() !== "false";
-  const refreshHours = clampInt(env.REFRESH_HOURS, 1, 24, 6);
-  const refreshAfter = new Date(Date.now() + refreshHours * 3600000).toISOString();
-  const cacheKey = `chance_oil_v3_${region}`;
-
-
-  function base64Utf8(input) {
-    const bytes = unescape(encodeURIComponent(input));
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let out = "";
-    for (let i = 0; i < bytes.length; i += 3) {
-      const a = bytes.charCodeAt(i);
-      const hasB = i + 1 < bytes.length;
-      const hasC = i + 2 < bytes.length;
-      const b = hasB ? bytes.charCodeAt(i + 1) : 0;
-      const c = hasC ? bytes.charCodeAt(i + 2) : 0;
-      const n = (a << 16) | (b << 8) | c;
-      out += chars[(n >> 18) & 63];
-      out += chars[(n >> 12) & 63];
-      out += hasB ? chars[(n >> 6) & 63] : "=";
-      out += hasC ? chars[n & 63] : "=";
-    }
-    return out;
-  }
-
-  function svgData(svg) {
-    return `data:image/svg+xml;base64,${base64Utf8(svg)}`;
-  }
+  const env = ctx.env || {};
 
   const C = {
-    bg: { light: "#F5F1E8", dark: "#171410" },
-    text: { light: "#29251F", dark: "#FFF7EB" },
-    sub: { light: "#7C7469", dark: "#B9AC9D" },
-    line: { light: "#DDD4C7", dark: "#3B332B" },
-    p92: { light: "#B77B10", dark: "#F4C85D" },
-    p95: { light: "#C5622C", dark: "#F59B67" },
-    p98: { light: "#B64750", dark: "#F18A91" },
-    diesel: { light: "#287A55", dark: "#69D49C" },
-    up: { light: "#C4493F", dark: "#F08C82" },
-    down: { light: "#27805D", dark: "#67D5A2" },
+    bg: { light: "#F5F1E8", dark: "#181612" },
+    card: { light: "#FFFFFFD8", dark: "#26231D" },
+    soft: { light: "#EAE5DA", dark: "#312D26" },
+    text: { light: "#26231F", dark: "#F5F2EC" },
+    secondary: { light: "#7A746B", dark: "#B8B0A4" },
+    accent: { light: "#2E7D5B", dark: "#66C49A" },
+    up: { light: "#C34A3A", dark: "#FF8A7A" },
+    down: { light: "#2E7D5B", dark: "#66C49A" },
+    flat: { light: "#8A8176", dark: "#B8B0A4" },
+    chartLine: "#2E7D5B",
+    chartFill: "#2E7D5B22",
+    chartGrid: "#8A817633",
+    chartText: "#7A746B",
   };
 
-  const map = {
-    beijing:"北京",shanghai:"上海",tianjin:"天津",chongqing:"重庆",
-    guangdong:"广东",jiangsu:"江苏",zhejiang:"浙江",shandong:"山东",henan:"河南",
-    hebei:"河北",sichuan:"四川",hubei:"湖北",hunan:"湖南",anhui:"安徽",fujian:"福建",
-    jiangxi:"江西",liaoning:"辽宁",hainan:"海南",jilin:"吉林",heilongjiang:"黑龙江",
-    yunnan:"云南",guizhou:"贵州",guangxi:"广西",gansu:"甘肃",qinghai:"青海",
-    ningxia:"宁夏",xinjiang:"新疆",xizang:"西藏",neimenggu:"内蒙古",
-    guangzhou:"广州",nanjing:"南京",hangzhou:"杭州",jinan:"济南",zhengzhou:"郑州",
-    shijiazhuang:"石家庄",chengdu:"成都",wuhan:"武汉",changsha:"长沙",hefei:"合肥",
-    fuzhou:"福州",nanchang:"南昌",shenyang:"沈阳",haikou:"海口",changchun:"长春",
-    haerbin:"哈尔滨",kunming:"昆明",guiyang:"贵阳",nanning:"南宁",lanzhou:"兰州",
-    xining:"西宁",yinchuan:"银川",wulumuqi:"乌鲁木齐",lasa:"拉萨",
-    huhehaote:"呼和浩特",xian:"西安",taiyuan:"太原",yancheng:"盐城",
-    "shanxi-1":"山西","shanxi-3":"陕西"
+  const number = (value, fallback) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
   };
 
-  function clampInt(v, min, max, fallback) {
-    const n = Number.parseInt(v, 10);
-    return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
-  }
+  const string = (value, fallback = "") => {
+    const s = String(value ?? "").trim();
+    return s || fallback;
+  };
 
-  function regionName() {
-    const parts = region.split("/");
-    const key = parts[1] || parts[0];
-    return map[key] || key || "当前地区";
-  }
-
-  function parsePrices(html) {
-    const rows = [];
-    for (const block of html.match(/<dl>[\s\S]+?<\/dl>/gi) || []) {
-      const name = block.match(/<dt[^>]*>([^<]+)<\/dt>/i)?.[1]?.trim() || "";
-      const raw = block.match(/<dd[^>]*>([^<]+)<\/dd>/i)?.[1] || "";
-      const value = Number.parseFloat(raw.match(/[\d.]+/)?.[0]);
-      if (name.includes("油") && Number.isFinite(value)) rows.push({ name, value });
+  const parseSeries = (value) => {
+    if (Array.isArray(value)) {
+      return value.map(Number).filter(Number.isFinite).slice(-16);
     }
-    const result = { p92: null, p95: null, p98: null, diesel: null };
-    for (const row of rows) {
-      if (/92/.test(row.name)) result.p92 = row.value;
-      else if (/95/.test(row.name)) result.p95 = row.value;
-      else if (/98/.test(row.name)) result.p98 = row.value;
-      else if (/柴油|0号|0 号/.test(row.name)) result.diesel = row.value;
+    return String(value || "")
+      .split(/[|,，\s]+/)
+      .map(Number)
+      .filter(Number.isFinite)
+      .slice(-16);
+  };
+
+  const defaultGrade = ["92", "95", "98", "0"].includes(String(env.DEFAULT_GRADE))
+    ? String(env.DEFAULT_GRADE)
+    : "95";
+
+  const base = {
+    city: string(env.CITY, "昆明"),
+    defaultGrade,
+    prices: {
+      "92": number(env.PRICE_92, 7.58),
+      "95": number(env.PRICE_95, 8.12),
+      "98": number(env.PRICE_98, 8.76),
+      "0": number(env.PRICE_0, 7.18),
+    },
+    history: {
+      "92": parseSeries(env.HISTORY_92),
+      "95": parseSeries(env.HISTORY_95),
+      "98": parseSeries(env.HISTORY_98),
+      "0": parseSeries(env.HISTORY_0),
+    },
+    change: number(env.CHANGE, 0),
+    apiUrl: string(env.API_URL),
+    timeout: Math.min(Math.max(number(env.TIMEOUT, 5000), 2000), 15000),
+  };
+
+  async function loadData() {
+    if (!base.apiUrl) return base;
+
+    try {
+      const response = await ctx.http.get(base.apiUrl, {
+        timeout: base.timeout,
+        credentials: "omit",
+      });
+
+      if (!response || response.status < 200 || response.status >= 300) {
+        throw new Error(`HTTP ${response?.status || 0}`);
+      }
+
+      const raw = typeof response.json === "function"
+        ? await response.json()
+        : JSON.parse(typeof response.body === "string" ? response.body : await response.text());
+
+      const root = raw?.data || raw || {};
+      const cityNode =
+        root?.cities?.[base.city] ||
+        root?.cityPrices?.[base.city] ||
+        root?.[base.city] ||
+        root;
+      const prices = cityNode.prices || {};
+      const history = cityNode.history || {};
+
+      return {
+        ...base,
+        city: string(cityNode.city || root.city, base.city),
+        prices: {
+          "92": number(prices["92"] ?? prices.p92, base.prices["92"]),
+          "95": number(prices["95"] ?? prices.p95, base.prices["95"]),
+          "98": number(prices["98"] ?? prices.p98, base.prices["98"]),
+          "0": number(prices["0"] ?? prices.p0, base.prices["0"]),
+        },
+        history: {
+          "92": parseSeries(history["92"] ?? history.p92).length
+            ? parseSeries(history["92"] ?? history.p92)
+            : base.history["92"],
+          "95": parseSeries(history["95"] ?? history.p95).length
+            ? parseSeries(history["95"] ?? history.p95)
+            : base.history["95"],
+          "98": parseSeries(history["98"] ?? history.p98).length
+            ? parseSeries(history["98"] ?? history.p98)
+            : base.history["98"],
+          "0": parseSeries(history["0"] ?? history.p0).length
+            ? parseSeries(history["0"] ?? history.p0)
+            : base.history["0"],
+        },
+        change: number(cityNode.change ?? root.change, base.change),
+      };
+    } catch {
+      return base;
     }
-    return result;
   }
 
-  function parseTrend(html) {
-    const m = html.match(/<div class="tishi">[\s\S]*?<span>([^<]+)<\/span>[\s\S]*?<br\/>([\s\S]+?)<br\/>/i);
-    if (!m) return "";
-    const date = (m[1].match(/(\d{1,2}月\d{1,2}日)/) || [])[1] || "";
-    const body = m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    const down = /下调|下跌/.test(body);
-    const amount = body.match(/([\d.]+)\s*[-至~]\s*([\d.]+)\s*元\/升/i);
-    const ton = body.match(/([\d.]+)\s*元\/吨/i);
-    const value = amount ? `${amount[1]}–${amount[2]} 元/升` : ton ? `${ton[1]} 元/吨` : "";
-    return [date, down ? "下调" : "上调", value].filter(Boolean).join(" ");
+  const data = await loadData();
+  const refreshAfter = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
+
+  const gradeName = (grade) => grade === "0" ? "0# 柴油" : `${grade}#`;
+  const priceText = (value) => `¥${number(value, 0).toFixed(2)}`;
+
+  const changeMeta = (value) => {
+    if (value > 0) return { symbol: "↑", text: `+${Math.abs(value).toFixed(2)}`, color: C.up };
+    if (value < 0) return { symbol: "↓", text: `-${Math.abs(value).toFixed(2)}`, color: C.down };
+    return { symbol: "→", text: "0.00", color: C.flat };
+  };
+
+  const change = changeMeta(data.change);
+
+  const makeText = (value, size, weight = "regular", color = C.text, extra = {}) => ({
+    type: "text",
+    text: String(value),
+    font: { size, weight },
+    textColor: color,
+    maxLines: extra.maxLines ?? 1,
+    minScale: extra.minScale ?? 0.78,
+    textAlign: extra.textAlign || "left",
+    flex: extra.flex,
+  });
+
+  const icon = (name, size, color = C.accent) => ({
+    type: "image",
+    src: `sf-symbol:${name}`,
+    width: size,
+    height: size,
+    color,
+  });
+
+  const spacer = (length) =>
+    length == null ? { type: "spacer" } : { type: "spacer", length };
+
+  function encodeSvg(svg) {
+    const bytes = unescape(encodeURIComponent(svg));
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes.charCodeAt(i));
+    return `data:image/svg+xml;base64,${btoa(binary)}`;
   }
 
-  let state = ctx.storage.getJSON(cacheKey) || { prices: {}, trend: "", savedAt: 0, stale: true };
-  try {
-    const resp = await ctx.http.get(`http://m.qiyoujiage.com/${region}.shtml`, {
-      headers: { referer: "http://m.qiyoujiage.com/", "user-agent": "Mozilla/5.0" },
-      timeout: 15000,
+  function trendImage(series, width = 300, height = 132) {
+    const values = parseSeries(series);
+    const padX = 12;
+    const padY = 14;
+    const plotW = width - padX * 2;
+    const plotH = height - padY * 2;
+
+    if (values.length < 2) {
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+          <rect width="${width}" height="${height}" rx="12" fill="transparent"/>
+          <path d="M${padX} ${height / 2} H${width - padX}" stroke="${C.chartGrid}" stroke-width="1" stroke-dasharray="4 4"/>
+          <text x="${width / 2}" y="${height / 2 + 4}" text-anchor="middle"
+                font-family="-apple-system,BlinkMacSystemFont,sans-serif"
+                font-size="12" fill="${C.chartText}">暂无走势数据</text>
+        </svg>`;
+      return encodeSvg(svg);
+    }
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = Math.max(max - min, 0.01);
+
+    const points = values.map((value, index) => {
+      const x = padX + (plotW * index) / (values.length - 1);
+      const y = padY + plotH - ((value - min) / span) * plotH;
+      return [x, y];
     });
-    if (resp.status !== 200) throw new Error(`HTTP ${resp.status}`);
-    const html = await resp.text();
-    const prices = parsePrices(html);
-    if ([prices.p92, prices.p95, prices.p98, prices.diesel].filter(Number.isFinite).length < 3) {
-      throw new Error("价格解析失败");
-    }
-    state = { prices, trend: showTrend ? parseTrend(html) : "", savedAt: Date.now(), stale: false };
-    ctx.storage.setJSON(cacheKey, state);
-  } catch {
-    state.stale = true;
+
+    const path = points
+      .map(([x, y], index) => `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`)
+      .join(" ");
+
+    const area = `${path} L${points[points.length - 1][0].toFixed(2)} ${height - padY} L${points[0][0].toFixed(2)} ${height - padY} Z`;
+    const last = points[points.length - 1];
+
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <defs>
+          <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="${C.chartLine}" stop-opacity="0.24"/>
+            <stop offset="1" stop-color="${C.chartLine}" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="M${padX} ${padY + plotH * 0.25} H${width - padX}
+                 M${padX} ${padY + plotH * 0.5} H${width - padX}
+                 M${padX} ${padY + plotH * 0.75} H${width - padX}"
+              stroke="${C.chartGrid}" stroke-width="1"/>
+        <path d="${area}" fill="url(#fill)"/>
+        <path d="${path}" fill="none" stroke="${C.chartLine}" stroke-width="3"
+              stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="${last[0]}" cy="${last[1]}" r="4" fill="${C.chartLine}"/>
+        <text x="${padX}" y="${height - 2}" font-family="-apple-system,BlinkMacSystemFont,sans-serif"
+              font-size="10" fill="${C.chartText}">${min.toFixed(2)}</text>
+        <text x="${width - padX}" y="${height - 2}" text-anchor="end"
+              font-family="-apple-system,BlinkMacSystemFont,sans-serif"
+              font-size="10" fill="${C.chartText}">${max.toFixed(2)}</text>
+      </svg>`;
+
+    return encodeSvg(svg);
   }
 
-  const items = [
-    { key:"p92", label:"92", sub:"汽油", color:C.p92 },
-    { key:"p95", label:"95", sub:"汽油", color:C.p95 },
-    { key:"p98", label:"98", sub:"汽油", color:C.p98 },
-    { key:"diesel", label:"0", sub:"柴油", color:C.diesel },
-  ].filter(x => Number.isFinite(state.prices?.[x.key]));
-
-  const trendDown = /下调|下跌/.test(state.trend || "");
-  const trendColor = trendDown ? C.down : C.up;
-  const Text = (text, size, weight="regular", color=C.text, extra={}) => ({
-    type:"text", text:String(text), font:{size,weight}, textColor:color,
-    maxLines:1, minScale:0.5, ...extra,
-  });
-  const Icon = (name,color,size) => ({
-    type:"image", src:`sf-symbol:${name}`, color, width:size, height:size,
-  });
-  const Divider = () => ({ type:"stack", height:1, backgroundColor:C.line, children:[] });
-
-  if (family === "accessoryInline") {
-    const p = state.prices?.p92;
-    return { type:"widget", refreshAfter, children:[Text(`${regionName()} 92# ${Number.isFinite(p) ? p.toFixed(2) : "--"} 元/升`, "caption1", "semibold")] };
-  }
-
-  if (family === "accessoryCircular") {
-    const p = state.prices?.p95 ?? state.prices?.p92;
+  function header() {
     return {
-      type:"widget", refreshAfter, padding:4, gap:1,
-      children:[
-        Icon("fuelpump.fill", C.p95, 17),
-        Text(Number.isFinite(p) ? p.toFixed(2) : "--", "headline", "bold", C.text, {textAlign:"center"}),
-        Text("元/升", "caption2", "medium", C.sub, {textAlign:"center"}),
+      type: "stack",
+      direction: "row",
+      alignItems: "center",
+      gap: 6,
+      children: [
+        icon("fuelpump.fill", 18),
+        makeText("今日油价", "headline", "bold"),
+        spacer(),
+        makeText(data.city, "caption1", "semibold", C.accent),
       ],
     };
   }
 
-  if (family === "accessoryRectangular") {
-    const p92 = Number.isFinite(state.prices?.p92) ? state.prices.p92.toFixed(2) : "--";
-    const p95 = Number.isFinite(state.prices?.p95) ? state.prices.p95.toFixed(2) : "--";
+  function compactPrice(grade, emphasized = false) {
     return {
-      type:"widget", refreshAfter, gap:2,
-      children:[
-        { type:"stack", direction:"row", alignItems:"center", gap:4, children:[Icon("fuelpump.fill", C.p92, 11), Text(`${regionName()}油价`, "caption1", "semibold"), {type:"spacer"}, state.stale ? Text("缓存", "caption2", "medium", C.sub) : Text("实时", "caption2", "medium", C.down)] },
-        Text(`92#  ${p92}    95#  ${p95}`, "headline", "bold"),
-        showTrend && state.trend ? Text(state.trend, "caption2", "medium", trendColor) : Text("元/升", "caption2", "medium", C.sub),
+      type: "stack",
+      direction: "column",
+      alignItems: "start",
+      gap: 3,
+      padding: emphasized ? 12 : 10,
+      flex: 1,
+      borderRadius: 12,
+      backgroundColor: emphasized ? C.card : C.soft,
+      children: [
+        makeText(gradeName(grade), "caption1", "semibold", C.secondary),
+        makeText(priceText(data.prices[grade]), emphasized ? "title3" : "headline", "bold"),
       ],
     };
   }
 
-
-  function spectrumSvg(items) {
-    const values = items.map(x => Number(state.prices?.[x.key])).filter(Number.isFinite);
-    const min = values.length ? Math.min(...values) - .12 : 0;
-    const max = values.length ? Math.max(...values) + .12 : 1;
-    const colors = ["#39D6A2","#F0B44C","#FF6672","#43A8FF"];
-    const tubes = items.map((item,i) => {
-      const v = Number(state.prices?.[item.key]);
-      if (!Number.isFinite(v)) return "";
-      const ratio = Math.max(.12, Math.min(1,(v-min)/Math.max(.1,max-min)));
-      const h = 10 + ratio*34;
-      const x = 12+i*34;
-      const y = 52-h;
-      return `<rect x="${x}" y="6" width="18" height="46" rx="9" fill="none" stroke="#FFFFFF" stroke-opacity=".22" stroke-width="1.4"/>
-      <rect x="${x+2}" y="${y}" width="14" height="${52-y-2}" rx="7" fill="${colors[i]}" fill-opacity=".88"/>
-      <ellipse cx="${x+9}" cy="${y}" rx="7" ry="2.3" fill="${colors[i]}"/>`;
-    }).join("");
-    return svgData(`<svg xmlns="http://www.w3.org/2000/svg" width="140" height="58" viewBox="0 0 140 58">${tubes}</svg>`);
-  }
-
-  function priceCell(item) {
-    const value = state.prices[item.key];
+  function renderInline() {
+    const grade = data.defaultGrade;
     return {
-      type:"stack", direction:"column", flex:1, gap:isLarge ? 2 : 1,
-      children:[
-        { type:"stack", direction:"row", alignItems:"center", gap:4, children:[
-          Text(item.label, isLarge ? 15 : 12, "heavy", item.color),
-          Text(item.sub, isLarge ? 10 : 9, "medium", C.sub),
-        ]},
-        Text(value.toFixed(2), isLarge ? 30 : 24, "bold", C.text),
-        Text("元/升", isLarge ? 10 : 9, "medium", C.sub),
+      type: "widget",
+      refreshAfter,
+      children: [
+        makeText(
+          `${gradeName(grade)} ${priceText(data.prices[grade])} ${change.symbol}${Math.abs(data.change).toFixed(2)}`,
+          "caption1",
+          "semibold"
+        ),
       ],
     };
   }
 
-  const firstRow = items.slice(0,2);
-  const secondRow = items.slice(2,4);
+  function renderCircular() {
+    const grade = data.defaultGrade;
+    return {
+      type: "widget",
+      refreshAfter,
+      padding: 4,
+      children: [
+        makeText(gradeName(grade), "caption2", "semibold", C.secondary, { textAlign: "center" }),
+        makeText(data.prices[grade].toFixed(2), "title3", "bold", C.text, { textAlign: "center" }),
+      ],
+    };
+  }
 
-  return {
-    type:"widget",
-    refreshAfter,
-    padding:isLarge ? [14,16,14,16] : [11,13,11,13],
-    gap:isLarge ? 10 : 7,
-    backgroundColor:C.bg,
-    children:[
-      { type:"stack", direction:"row", alignItems:"center", gap:6, children:[
-        Icon("fuelpump.fill", C.p92, isLarge ? 15 : 13),
-        Text(`${regionName()}实时油价`, isLarge ? 14 : 12, "bold"),
-        state.stale ? Text("缓存数据", isLarge ? 10 : 9, "medium", C.sub) : Text("LIVE", isLarge ? 10 : 9, "bold", C.down),
-        {type:"spacer"},
-        {type:"image",src:spectrumSvg(items),width:isLarge?132:104,height:isLarge?54:42,resizeMode:"contain"},
-        { type:"date", date:new Date().toISOString(), format:"time", font:{size:isLarge ? 10 : 9,weight:"medium"}, textColor:C.sub },
-      ]},
-      Divider(),
-      { type:"stack", direction:"row", gap:isLarge ? 20 : 12, flex:1, children:firstRow.map(priceCell) },
-      secondRow.length ? Divider() : {type:"spacer",length:0},
-      secondRow.length ? { type:"stack", direction:"row", gap:isLarge ? 20 : 12, flex:1, children:secondRow.map(priceCell) } : {type:"spacer",length:0},
-      ...(showTrend && state.trend ? [
-        Divider(),
-        { type:"stack", direction:"row", alignItems:"center", gap:5, children:[
-          Icon(trendDown ? "arrow.down.right" : "arrow.up.right", trendColor, isLarge ? 12 : 10),
-          Text(state.trend, isLarge ? 11 : 9, "semibold", trendColor, {flex:1}),
-        ]},
-      ] : []),
-    ],
-  };
+  function renderRectangular() {
+    const grade = data.defaultGrade;
+    return {
+      type: "widget",
+      refreshAfter,
+      padding: 6,
+      gap: 2,
+      children: [
+        makeText(`${data.city} · ${gradeName(grade)}`, "caption1", "semibold", C.secondary),
+        makeText(priceText(data.prices[grade]), "headline", "bold"),
+        makeText(`${change.symbol}${change.text}`, "caption1", "semibold", change.color),
+      ],
+    };
+  }
+
+  function renderSmall() {
+    const grade = data.defaultGrade;
+    return {
+      type: "widget",
+      refreshAfter,
+      padding: 12,
+      gap: 8,
+      backgroundColor: C.bg,
+      children: [
+        header(),
+        {
+          type: "stack",
+          direction: "column",
+          alignItems: "center",
+          flex: 1,
+          gap: 4,
+          children: [
+            makeText(gradeName(grade), "headline", "semibold", C.secondary, { textAlign: "center" }),
+            makeText(priceText(data.prices[grade]), "largeTitle", "bold", C.text, { textAlign: "center" }),
+            makeText(`${change.symbol}${change.text}`, "subheadline", "semibold", change.color, { textAlign: "center" }),
+          ],
+        },
+        makeText("元 / 升", "caption1", "medium", C.secondary, { textAlign: "center" }),
+      ],
+    };
+  }
+
+  function renderMedium() {
+    return {
+      type: "widget",
+      refreshAfter,
+      padding: 14,
+      gap: 10,
+      backgroundColor: C.bg,
+      children: [
+        header(),
+        {
+          type: "stack",
+          direction: "row",
+          gap: 8,
+          flex: 1,
+          children: ["92", "95", "98", "0"].map((grade) => compactPrice(grade, grade === data.defaultGrade)),
+        },
+        {
+          type: "stack",
+          direction: "row",
+          alignItems: "center",
+          children: [
+            makeText("本轮变动", "caption1", "medium", C.secondary),
+            spacer(),
+            makeText(`${change.symbol}${change.text} 元/L`, "caption1", "semibold", change.color),
+          ],
+        },
+      ],
+    };
+  }
+
+  function renderLarge() {
+    const grade = data.defaultGrade;
+
+    const priceRow = (item) => ({
+      type: "stack",
+      direction: "row",
+      alignItems: "center",
+      flex: 1,
+      padding: [10, 14, 10, 14],
+      borderRadius: 12,
+      backgroundColor: item === grade ? C.card : C.soft,
+      children: [
+        {
+          type: "stack",
+          direction: "column",
+          gap: 3,
+          children: [
+            makeText(
+              gradeName(item),
+              "headline",
+              item === grade ? "bold" : "semibold",
+              item === grade ? C.accent : C.secondary
+            ),
+            makeText(
+              item === grade ? "默认油号" : "元 / 升",
+              "caption1",
+              "medium",
+              C.secondary
+            ),
+          ],
+        },
+        spacer(),
+        makeText(
+          priceText(data.prices[item]),
+          "title2",
+          "bold",
+          C.text,
+          { textAlign: "right", minScale: 0.84 }
+        ),
+      ],
+    });
+
+    return {
+      type: "widget",
+      refreshAfter,
+      padding: 16,
+      gap: 10,
+      backgroundColor: C.bg,
+      children: [
+        header(),
+
+        {
+          type: "stack",
+          direction: "column",
+          flex: 1,
+          gap: 8,
+          children: ["92", "95", "98", "0"].map(priceRow),
+        },
+
+        {
+          type: "stack",
+          direction: "row",
+          alignItems: "center",
+          padding: [10, 14, 10, 14],
+          borderRadius: 12,
+          backgroundColor: C.card,
+          children: [
+            makeText("本轮调整", "headline", "semibold", C.secondary),
+            spacer(),
+            makeText(
+              `${change.symbol}${change.text} 元/L`,
+              "title3",
+              "bold",
+              change.color,
+              { textAlign: "right", minScale: 0.82 }
+            ),
+          ],
+        },
+      ],
+    };
+  }
+
+  function renderExtraLarge() {
+    const grade = data.defaultGrade;
+    const history = data.history[grade];
+
+    return {
+      type: "widget",
+      refreshAfter,
+      padding: 18,
+      gap: 12,
+      backgroundColor: C.bg,
+      children: [
+        header(),
+        {
+          type: "stack",
+          direction: "row",
+          gap: 14,
+          flex: 1,
+          children: [
+            {
+              type: "stack",
+              direction: "column",
+              gap: 8,
+              flex: 2,
+              padding: 12,
+              borderRadius: 12,
+              backgroundColor: C.card,
+              children: [
+                {
+                  type: "stack",
+                  direction: "row",
+                  alignItems: "end",
+                  children: [
+                    makeText(`${gradeName(grade)} 价格走势`, "headline", "semibold"),
+                    spacer(),
+                    makeText(priceText(data.prices[grade]), "title2", "bold"),
+                  ],
+                },
+                {
+                  type: "image",
+                  src: trendImage(history, 430, 220),
+                  flex: 1,
+                  resizeMode: "contain",
+                },
+              ],
+            },
+            {
+              type: "stack",
+              direction: "column",
+              gap: 10,
+              flex: 1,
+              children: [
+                ...["92", "95", "98", "0"].map((item) =>
+                  compactPrice(item, item === grade)
+                ),
+                {
+                  type: "stack",
+                  direction: "row",
+                  padding: 10,
+                  borderRadius: 12,
+                  backgroundColor: C.soft,
+                  children: [
+                    makeText("本轮变动", "caption1", "medium", C.secondary),
+                    spacer(),
+                    makeText(`${change.symbol}${change.text} 元/L`, "subheadline", "bold", change.color),
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  switch (family) {
+    case "accessoryInline": return renderInline();
+    case "accessoryCircular": return renderCircular();
+    case "accessoryRectangular": return renderRectangular();
+    case "systemSmall": return renderSmall();
+    case "systemMedium": return renderMedium();
+    case "systemExtraLarge": return renderExtraLarge();
+    case "systemLarge":
+    default: return renderLarge();
+  }
 }
