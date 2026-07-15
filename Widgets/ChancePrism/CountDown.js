@@ -1,242 +1,658 @@
-/**
- * 任务倒计时 · Egern Widget
- * 重构：Chance
+/*
+ * name: 倒计时日志
+ * author: chance
+ * category: 效率工具 / 多任务倒计时
+ * converted: 2026-07-15
+ * target: Egern
+ * version: 1.1.0
  *
- * 环境变量：
- * TITLE / MAX_ITEMS / REFRESH_MIN / TZ_OFFSET
- * NAME1 / DATE1 / DETAIL1 ... NAME20 / DATE20 / DETAIL20
+ * 设计：
+ * - 日志本 / 手账风格：暖色纸张、日期栏、横线任务清单。
+ * - 七种 widgetFamily 分别布局，不使用同比例压缩。
+ * - 最近任务为一级信息，后续任务按截止时间排序。
+ * - 使用 Egern 官方 date 元素显示实时 timer / relative。
+ *
+ * 环境变量（每个任务独立配置）：
+ * name1=论文答辩
+ * date1=2026-12-18
+ * detail1=302会议室
+ *
+ * name2=提交论文
+ * date2=2026-12-25
+ * detail2=学院办公室
+ *
+ * 可继续配置 name3/date3/detail3 …… name20/date20/detail20。
+ * TITLE=倒计时日志
+ * NOTE=按计划推进实验与数据整理
+ *
+ * 规则：
+ * - date1-x 决定任务是否存在，格式固定为 YYYY-MM-DD。
+ * - name1-x 缺失时自动生成“任务 N”。
+ * - detail1-x 缺失时不占空间。
+ * - 无效日期自动忽略。
+ * - systemLarge 最多显示 4 个任务。
+ * - systemMedium 最多显示 2 个任务。
+ * - systemSmall 只显示 1 个任务。
  */
 
 export default async function (ctx) {
   const env = ctx.env || {};
   const family = ctx.widgetFamily || "systemMedium";
-  const compact = family === "systemSmall" || family === "systemMedium";
-  const isLarge = family === "systemLarge" || family === "systemExtraLarge";
-  const title = String(env.TITLE || "任务倒计时").trim();
-  const refreshMin = clampInt(env.REFRESH_MIN, 5, 1440, 30);
-  const maxItems = clampInt(env.MAX_ITEMS, 1, 20, familyLimit());
-  const tzOffset = parseOffset(env.TZ_OFFSET);
-  const refreshAfter = new Date(Date.now() + refreshMin * 60000).toISOString();
-
-
-  function base64Utf8(input) {
-    const bytes = unescape(encodeURIComponent(input));
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let out = "";
-    for (let i = 0; i < bytes.length; i += 3) {
-      const a = bytes.charCodeAt(i);
-      const hasB = i + 1 < bytes.length;
-      const hasC = i + 2 < bytes.length;
-      const b = hasB ? bytes.charCodeAt(i + 1) : 0;
-      const c = hasC ? bytes.charCodeAt(i + 2) : 0;
-      const n = (a << 16) | (b << 8) | c;
-      out += chars[(n >> 18) & 63];
-      out += chars[(n >> 12) & 63];
-      out += hasB ? chars[(n >> 6) & 63] : "=";
-      out += hasC ? chars[n & 63] : "=";
-    }
-    return out;
-  }
-
-  function svgData(svg) {
-    return `data:image/svg+xml;base64,${base64Utf8(svg)}`;
-  }
 
   const C = {
-    bg: { light:"#F4F0E8", dark:"#191713" },
-    text: { light:"#27231E", dark:"#F4EEE5" },
-    sub: { light:"#81776B", dark:"#AEA397" },
-    line: { light:"#DDD4C8", dark:"#3A342E" },
-    urgent: { light:"#C14D43", dark:"#F18A80" },
-    soon: { light:"#BD7B20", dark:"#E8B462" },
-    near: { light:"#6E7FA5", dark:"#AAB9D8" },
-    calm: { light:"#7F8791", dark:"#B5BDC7" },
-    today: { light:"#21845A", dark:"#63D69A" },
+    paper: { light: "#F7F0DE", dark: "#211E19" },
+    paperAlt: { light: "#FFF9EC", dark: "#2A261F" },
+    ink: { light: "#2E2923", dark: "#F1E9DA" },
+    secondary: { light: "#756C60", dark: "#BDB3A4" },
+    rule: { light: "#B8C6CF88", dark: "#66768066" },
+    margin: { light: "#D9867488", dark: "#B8665A77" },
+    accent: { light: "#426B58", dark: "#7EB397" },
+    urgent: { light: "#B55242", dark: "#E68473" },
+    warning: { light: "#A46C2D", dark: "#D8A05A" },
+    done: { light: "#69756D", dark: "#9DA89F" },
   };
 
-  function clampInt(v,min,max,fallback){
-    const n = Number.parseInt(v,10);
-    return Number.isFinite(n) ? Math.max(min,Math.min(max,n)) : fallback;
+  const title = String(env.TITLE || "倒计时日志").trim() || "倒计时日志";
+  const note = String(env.NOTE || "按计划推进今天的任务").trim();
+
+  function parseDateOnly(value) {
+    const raw = String(value || "").trim();
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    if (!match) return null;
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+    if (
+      date.getFullYear() !== year ||
+      date.getMonth() !== month - 1 ||
+      date.getDate() !== day
+    ) {
+      return null;
+    }
+
+    return date;
   }
 
-  function parseOffset(v) {
-    if (v == null || v === "") return null;
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.max(-12, Math.min(14, n)) : null;
+  function parseTasks() {
+    const result = [];
+
+    for (let index = 1; index <= 20; index++) {
+      const target = parseDateOnly(env[`date${index}`]);
+      if (!target) continue;
+
+      result.push({
+        name: String(env[`name${index}`] || `任务 ${index}`).trim() || `任务 ${index}`,
+        detail: String(env[`detail${index}`] || "").trim(),
+        rawDate: target.toISOString(),
+        timestamp: target.getTime(),
+      });
+    }
+
+    return result.sort((a, b) => a.timestamp - b.timestamp);
   }
 
-  function familyLimit() {
-    if (family === "systemSmall") return 2;
-    if (family === "systemMedium") return 3;
-    if (family === "systemLarge") return 6;
-    if (family === "systemExtraLarge") return 8;
-    return 3;
-  }
+  const tasks = parseTasks();
+  const now = Date.now();
 
-  function parseDate(input) {
-    if (!input) return null;
-    const m = String(input).trim().replace(/[/.]/g,"-").match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    if (!m) return null;
-    const y = +m[1], mo = +m[2], d = +m[3];
-    const dt = new Date(y, mo - 1, d);
-    return dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d ? dt : null;
-  }
+  function statusOf(task) {
+    const diff = task.timestamp - now;
+    const day = 86400000;
 
-  function dayNumber(date) {
-    if (!date) return null;
-    if (tzOffset == null) return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000;
-    const shifted = new Date(date.getTime() + tzOffset * 3600000);
-    return Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()) / 86400000;
-  }
-
-  function todayNumber() {
-    const now = new Date();
-    if (tzOffset == null) return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86400000;
-    const shifted = new Date(now.getTime() + tzOffset * 3600000);
-    return Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()) / 86400000;
-  }
-
-  function daysLeft(date) {
-    return date ? Math.round(dayNumber(date) - todayNumber()) : null;
-  }
-
-  const items = [];
-  for (let i=1;i<=20;i++) {
-    const name = env[`NAME${i}`];
-    const date = parseDate(env[`DATE${i}`]);
-    const detail = env[`DETAIL${i}`] || "";
-    if (!name && !date && !detail) continue;
-    const days = daysLeft(date);
-    if (date && days < 0) continue;
-    items.push({ name:String(name || `任务 ${i}`), detail:String(detail), date, days });
-  }
-
-  if (!items.length && (env.NAME || env.DATE || env.DETAIL)) {
-    const date = parseDate(env.DATE);
-    const days = daysLeft(date);
-    if (!(date && days < 0)) items.push({ name:String(env.NAME || "任务"), detail:String(env.DETAIL || ""), date, days });
-  }
-
-  items.sort((a,b) => (a.days ?? 999999) - (b.days ?? 999999));
-  const visible = items.slice(0,maxItems);
-
-  function tone(days) {
-    if (days === 0) return C.today;
-    if (days == null || days > 30) return C.calm;
-    if (days <= 3) return C.urgent;
-    if (days <= 14) return C.soon;
-    return C.near;
-  }
-
-  function display(days) {
-    if (days == null) return "--";
-    if (days === 0) return "TODAY";
-    return `${days}d`;
-  }
-
-  const Text=(text,size,weight="regular",color=C.text,extra={})=>({
-    type:"text",text:String(text),font:{size,weight},textColor:color,maxLines:1,minScale:0.42,...extra
-  });
-  const Icon=(name,color,size)=>({type:"image",src:`sf-symbol:${name}`,color,width:size,height:size});
-  const Divider=()=>({type:"stack",height:1,backgroundColor:C.line,children:[]});
-
-  const first = visible[0];
-  if (family === "accessoryInline") {
-    return { type:"widget", refreshAfter, children:[Text(first ? `${first.name} · ${display(first.days)}` : `${title} · 未配置`, "caption1", "semibold")] };
-  }
-  if (family === "accessoryCircular") {
+    if (diff < 0) {
+      return {
+        label: "已逾期",
+        color: C.urgent,
+        icon: "exclamationmark.circle.fill",
+      };
+    }
+    if (diff <= day) {
+      return {
+        label: "24小时内",
+        color: C.urgent,
+        icon: "clock.badge.exclamationmark.fill",
+      };
+    }
+    if (diff <= day * 7) {
+      return {
+        label: "7天内",
+        color: C.warning,
+        icon: "clock.fill",
+      };
+    }
     return {
-      type:"widget", refreshAfter, padding:4, gap:1,
-      children:[
-        Icon(first?.days === 0 ? "checkmark.circle.fill" : "timer", tone(first?.days), 17),
-        Text(first ? display(first.days) : "--", "headline", "bold", tone(first?.days), {textAlign:"center"}),
-        Text(first ? first.name : "未配置", "caption2", "medium", C.sub, {textAlign:"center"}),
+      label: "计划中",
+      color: C.accent,
+      icon: "circle",
+    };
+  }
+
+  function dateParts(date) {
+    const d = new Date(date);
+    const months = [
+      "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+      "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+    ];
+    return {
+      month: months[d.getMonth()],
+      day: String(d.getDate()).padStart(2, "0"),
+      year: String(d.getFullYear()),
+    };
+  }
+
+  function daysText(task) {
+    const diff = task.timestamp - now;
+    const days = Math.ceil(Math.abs(diff) / 86400000);
+    if (diff < 0) return `逾期 ${days} 天`;
+    if (days === 0) return "今天";
+    return `${days} 天`;
+  }
+
+  function makeText(value, size, weight = "regular", color = C.ink, extra = {}) {
+    return {
+      type: "text",
+      text: String(value),
+      font: {
+        size,
+        weight,
+        ...(extra.family ? { family: extra.family } : {}),
+      },
+      textColor: color,
+      maxLines: extra.maxLines ?? 1,
+      minScale: extra.minScale ?? 0.78,
+      textAlign: extra.textAlign || "left",
+      ...(extra.flex != null ? { flex: extra.flex } : {}),
+    };
+  }
+
+  function icon(name, size, color = C.accent) {
+    return {
+      type: "image",
+      src: `sf-symbol:${name}`,
+      width: size,
+      height: size,
+      color,
+    };
+  }
+
+  const spacer = (length) =>
+    length == null ? { type: "spacer" } : { type: "spacer", length };
+
+  function rule() {
+    return {
+      type: "stack",
+      height: 1,
+      backgroundColor: C.rule,
+      children: [],
+    };
+  }
+
+  function emptyWidget(message = "还没有记录任务") {
+    return {
+      type: "widget",
+      padding: 16,
+      gap: 10,
+      backgroundColor: C.paper,
+      refreshAfter: new Date(now + 6 * 60 * 60 * 1000).toISOString(),
+      children: [
+        {
+          type: "stack",
+          direction: "row",
+          alignItems: "center",
+          gap: 7,
+          children: [
+            icon("book.closed.fill", 18, C.accent),
+            makeText(title, "headline", "bold"),
+          ],
+        },
+        spacer(),
+        icon("square.and.pencil", 34, C.secondary),
+        makeText(message, "subheadline", "semibold", C.secondary, {
+          textAlign: "center",
+        }),
+        spacer(),
       ],
     };
   }
-  if (family === "accessoryRectangular") {
+
+  if (!tasks.length) return emptyWidget();
+
+  const primary = tasks.find((task) => task.timestamp >= now) || tasks[tasks.length - 1];
+  const primaryStatus = statusOf(primary);
+  const refreshAfter = new Date(now + 30 * 60 * 1000).toISOString();
+
+  function liveCountdown(task, size, color, align = "left") {
+    if (task.timestamp < now) {
+      return makeText(daysText(task), size, "bold", color, {
+        textAlign: align,
+        family: "Menlo",
+      });
+    }
     return {
-      type:"widget", refreshAfter, gap:2,
-      children:first ? [
-        {type:"stack",direction:"row",alignItems:"center",gap:4,children:[Icon("timer",tone(first.days),11),Text(title,"caption1","semibold"),{type:"spacer"},Text(display(first.days),"headline","bold",tone(first.days))]},
-        Text(first.name,"headline","bold"),
-        Text(first.detail || "最近任务","caption2","medium",C.sub),
-      ] : [Text(title,"caption1","semibold"),Text("未配置任务","headline","bold"),Text("使用 NAME1 / DATE1 / DETAIL1","caption2","medium",C.sub)],
+      type: "date",
+      date: task.rawDate,
+      format: "timer",
+      font: { size, weight: "bold", family: "Menlo" },
+      textColor: color,
+      textAlign: align,
+      maxLines: 1,
+      minScale: 0.72,
     };
   }
 
-
-  function orbitSvg(item, width=282, height=76) {
-    const days = Number.isFinite(item?.days) ? Math.max(0,item.days) : 60;
-    const ratio = Math.max(.04, Math.min(.96, 1-Math.min(days,60)/60));
-    const angle = Math.PI + ratio*Math.PI;
-    const cx=width/2, cy=height/2+8, rx=width*.39, ry=height*.34;
-    const x=cx+rx*Math.cos(angle), y=cy+ry*Math.sin(angle);
-    const color=days===0?"#3FD18C":days<=3?"#FF6E76":days<=14?"#F0B14E":days<=30?"#879AFF":"#8D95A2";
-    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-      <defs><filter id="g"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
-      <path d="M${cx-rx} ${cy} A${rx} ${ry} 0 0 1 ${cx+rx} ${cy}" fill="none" stroke="#FFFFFF" stroke-opacity=".12" stroke-width="4" stroke-linecap="round"/>
-      <path d="M${cx-rx} ${cy} A${rx} ${ry} 0 0 1 ${x.toFixed(1)} ${y.toFixed(1)}" fill="none" stroke="${color}" stroke-width="4" stroke-linecap="round"/>
-      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="${color}" filter="url(#g)"/>
-      <circle cx="${cx+rx}" cy="${cy}" r="4" fill="#FFFFFF" fill-opacity=".75"/>
-    </svg>`;
-    return svgData(svg);
-  }
-
-  function row(item) {
-    const color=tone(item.days);
+  function compactTaskRow(task, showDetail = false) {
+    const status = statusOf(task);
     return {
-      type:"stack", direction:"row", alignItems:"center", gap:isLarge?12:9, flex:1,
-      children:[
-        { type:"stack", direction:"column", flex:1, gap:compact?1:2, children:[
-          Text(item.name, compact?13:16, "bold", C.text),
-          Text(item.detail || " ", compact?9:11, "medium", C.sub),
-        ]},
-        Text(display(item.days), item.days===0 ? (compact?17:22) : (compact?24:31), "bold", color, {textAlign:"right"}),
+      type: "stack",
+      direction: "column",
+      gap: 3,
+      children: [
+        {
+          type: "stack",
+          direction: "row",
+          alignItems: "center",
+          gap: 7,
+          children: [
+            icon(status.icon, 14, status.color),
+            makeText(task.name.slice(0, 18), "subheadline", "semibold", C.ink, {
+              flex: 1,
+              minScale: 0.8,
+            }),
+            makeText(daysText(task), "caption1", "bold", status.color, {
+              textAlign: "right",
+              family: "Menlo",
+            }),
+          ],
+        },
+        ...(showDetail && task.detail
+          ? [
+              makeText(task.detail.slice(0, 28), "caption1", "regular", C.secondary, {
+                maxLines: 1,
+                minScale: 0.82,
+              }),
+            ]
+          : []),
+        rule(),
       ],
     };
   }
 
-  if (!visible.length) {
+  function header(showYear = false) {
+    const p = dateParts(now);
     return {
-      type:"widget", refreshAfter, padding:14, gap:8, backgroundColor:C.bg,
-      children:[
-        {type:"stack",direction:"row",alignItems:"center",gap:6,children:[Icon("timer",C.sub,13),Text(title,12,"bold"),{type:"spacer"}]},
-        {type:"spacer"},
-        Text("未配置任务","headline","bold",C.text,{textAlign:"center"}),
-        Text("使用 NAME1 / DATE1 / DETAIL1","caption1","medium",C.sub,{textAlign:"center",maxLines:2}),
-        {type:"spacer"},
+      type: "stack",
+      direction: "row",
+      alignItems: "end",
+      children: [
+        {
+          type: "stack",
+          direction: "column",
+          gap: 0,
+          children: [
+            makeText(`${p.month} ${p.day}`, "headline", "bold", C.accent, {
+              family: "Georgia",
+            }),
+            ...(showYear
+              ? [makeText(p.year, "caption2", "medium", C.secondary, { family: "Menlo" })]
+              : []),
+          ],
+        },
+        spacer(),
+        makeText(title.slice(0, 14), "headline", "bold", C.ink, {
+          textAlign: "right",
+          family: "Georgia",
+        }),
       ],
     };
   }
 
-  const children=[
-    {type:"stack",direction:"row",alignItems:"center",gap:6,children:[
-      Icon("timer",C.sub,isLarge?14:12),
-      Text(title,isLarge?14:12,"bold"),
-      {type:"spacer"},
-      Text(`${visible.length} 项`,isLarge?10:9,"medium",C.sub),
-    ]},
-    {
-      type:"image",
-      src:orbitSvg(visible[0],isLarge?282:248,isLarge?76:58),
-      width:isLarge?282:248,
-      height:isLarge?76:58,
-      resizeMode:"contain"
-    },
-    Divider(),
-  ];
-  visible.forEach((item,index)=>{
-    children.push(row(item));
-    if(index!==visible.length-1) children.push(Divider());
-  });
+  function renderInline() {
+    return {
+      type: "widget",
+      refreshAfter,
+      children: [
+        makeText(`${primary.name} · ${daysText(primary)}`, "caption1", "semibold"),
+      ],
+    };
+  }
 
-  return {
-    type:"widget",
-    refreshAfter,
-    padding:isLarge?[13,15,13,15]:[11,13,11,13],
-    gap:isLarge?7:5,
-    backgroundColor:C.bg,
-    children,
-  };
+  function renderCircular() {
+    return {
+      type: "widget",
+      refreshAfter,
+      padding: 4,
+      gap: 1,
+      children: [
+        icon(primaryStatus.icon, 13, primaryStatus.color),
+        makeText(daysText(primary).replace(" 天", ""), "headline", "bold", C.ink, {
+          textAlign: "center",
+          family: "Menlo",
+        }),
+        makeText(primary.timestamp < now ? "逾期" : "天", "caption2", "medium", C.secondary, {
+          textAlign: "center",
+        }),
+      ],
+    };
+  }
+
+  function renderRectangular() {
+    return {
+      type: "widget",
+      refreshAfter,
+      padding: 7,
+      gap: 3,
+      children: [
+        {
+          type: "stack",
+          direction: "row",
+          alignItems: "center",
+          gap: 5,
+          children: [
+            icon(primaryStatus.icon, 13, primaryStatus.color),
+            makeText(primary.name.slice(0, 12), "headline", "semibold", C.ink, {
+              flex: 1,
+            }),
+          ],
+        },
+        liveCountdown(primary, "caption1", primaryStatus.color),
+        makeText(primary.detail || primaryStatus.label, "caption2", "regular", C.secondary),
+      ],
+    };
+  }
+
+  function renderSmall() {
+    return {
+      type: "widget",
+      refreshAfter,
+      padding: 12,
+      gap: 7,
+      backgroundColor: C.paper,
+      children: [
+        header(),
+        rule(),
+        {
+          type: "stack",
+          direction: "column",
+          flex: 1,
+          alignItems: "center",
+          gap: 6,
+          children: [
+            spacer(),
+            makeText(primary.name.slice(0, 10), "headline", "bold", C.ink, {
+              textAlign: "center",
+            }),
+            liveCountdown(primary, "title2", primaryStatus.color, "center"),
+            makeText(daysText(primary), "caption1", "semibold", C.secondary, {
+              textAlign: "center",
+            }),
+            ...(primary.detail
+              ? [
+                  makeText(primary.detail.slice(0, 14), "caption1", "regular", C.secondary, {
+                    textAlign: "center",
+                    maxLines: 1,
+                  }),
+                ]
+              : []),
+            spacer(),
+          ],
+        },
+      ],
+    };
+  }
+
+  function renderMedium() {
+    const secondary = tasks.filter((task) => task !== primary).slice(0, 1);
+
+    return {
+      type: "widget",
+      refreshAfter,
+      padding: 14,
+      gap: 8,
+      backgroundColor: C.paper,
+      children: [
+        header(),
+        rule(),
+        {
+          type: "stack",
+          direction: "row",
+          gap: 14,
+          flex: 1,
+          children: [
+            {
+              type: "stack",
+              direction: "column",
+              flex: 1,
+              gap: 5,
+              padding: [4, 8],
+              children: [
+                makeText(primary.name.slice(0, 14), "headline", "bold"),
+                liveCountdown(primary, "title2", primaryStatus.color),
+                makeText(primary.detail || primaryStatus.label, "caption1", "regular", C.secondary, {
+                  maxLines: 2,
+                }),
+              ],
+            },
+            {
+              type: "stack",
+              width: 1,
+              backgroundColor: C.margin,
+              children: [],
+            },
+            {
+              type: "stack",
+              direction: "column",
+              flex: 1,
+              gap: 5,
+              children: secondary.length
+                ? secondary.map((task) => compactTaskRow(task, false))
+                : [
+                    spacer(),
+                    makeText("暂无后续任务", "caption1", "medium", C.secondary, {
+                      textAlign: "center",
+                    }),
+                    spacer(),
+                  ],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  function renderLarge() {
+    const secondary = tasks.filter((task) => task !== primary).slice(0, 3);
+
+    return {
+      type: "widget",
+      refreshAfter,
+      padding: 16,
+      gap: 9,
+      backgroundColor: C.paper,
+      children: [
+        header(true),
+        rule(),
+
+        {
+          type: "stack",
+          direction: "row",
+          alignItems: "start",
+          gap: 10,
+          padding: [8, 10],
+          borderRadius: 10,
+          backgroundColor: C.paperAlt,
+          children: [
+            {
+              type: "stack",
+              width: 3,
+              backgroundColor: C.margin,
+              children: [],
+            },
+            {
+              type: "stack",
+              direction: "column",
+              flex: 1,
+              gap: 6,
+              children: [
+                {
+                  type: "stack",
+                  direction: "row",
+                  alignItems: "center",
+                  gap: 7,
+                  children: [
+                    icon(primaryStatus.icon, 17, primaryStatus.color),
+                    makeText(primary.name.slice(0, 18), "title3", "bold", C.ink, {
+                      flex: 1,
+                    }),
+                  ],
+                },
+                makeText(
+                  new Date(primary.timestamp).toLocaleDateString("zh-CN", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  }),
+                  "caption1",
+                  "medium",
+                  C.secondary
+                ),
+                liveCountdown(primary, "title", primaryStatus.color),
+                ...(primary.detail
+                  ? [
+                      makeText(primary.detail.slice(0, 36), "subheadline", "regular", C.secondary, {
+                        maxLines: 2,
+                      }),
+                    ]
+                  : []),
+              ],
+            },
+          ],
+        },
+
+        {
+          type: "stack",
+          direction: "column",
+          flex: 1,
+          gap: 6,
+          children: secondary.length
+            ? secondary.map((task) => compactTaskRow(task, true))
+            : [
+                spacer(),
+                makeText("这一页没有更多任务", "subheadline", "medium", C.secondary, {
+                  textAlign: "center",
+                }),
+                spacer(),
+              ],
+        },
+
+        rule(),
+
+        {
+          type: "stack",
+          direction: "column",
+          gap: 3,
+          children: [
+            makeText("今日记录", "caption1", "bold", C.accent, {
+              family: "Georgia",
+            }),
+            makeText(`“${note.slice(0, 38)}”`, "subheadline", "regular", C.secondary, {
+              maxLines: 2,
+              minScale: 0.82,
+              family: "Georgia",
+            }),
+          ],
+        },
+      ],
+    };
+  }
+
+  function renderExtraLarge() {
+    const secondary = tasks.filter((task) => task !== primary).slice(0, 9);
+
+    return {
+      type: "widget",
+      refreshAfter,
+      padding: 18,
+      gap: 12,
+      backgroundColor: C.paper,
+      children: [
+        header(true),
+        rule(),
+        {
+          type: "stack",
+          direction: "row",
+          gap: 18,
+          flex: 1,
+          children: [
+            {
+              type: "stack",
+              direction: "column",
+              flex: 1,
+              gap: 8,
+              padding: 14,
+              borderRadius: 12,
+              backgroundColor: C.paperAlt,
+              children: [
+                makeText(primary.name.slice(0, 22), "title2", "bold"),
+                liveCountdown(primary, "largeTitle", primaryStatus.color),
+                makeText(daysText(primary), "headline", "semibold", C.secondary),
+                ...(primary.detail
+                  ? [
+                      makeText(primary.detail.slice(0, 48), "body", "regular", C.secondary, {
+                        maxLines: 3,
+                      }),
+                    ]
+                  : []),
+                spacer(),
+                makeText(`“${note.slice(0, 48)}”`, "subheadline", "regular", C.secondary, {
+                  maxLines: 3,
+                  family: "Georgia",
+                }),
+              ],
+            },
+            {
+              type: "stack",
+              width: 1,
+              backgroundColor: C.margin,
+              children: [],
+            },
+            {
+              type: "stack",
+              direction: "column",
+              flex: 2,
+              gap: 7,
+              children: secondary.length
+                ? secondary.map((task) => compactTaskRow(task, true))
+                : [
+                    spacer(),
+                    makeText("暂无后续任务", "subheadline", "medium", C.secondary, {
+                      textAlign: "center",
+                    }),
+                    spacer(),
+                  ],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  switch (family) {
+    case "accessoryInline":
+      return renderInline();
+    case "accessoryCircular":
+      return renderCircular();
+    case "accessoryRectangular":
+      return renderRectangular();
+    case "systemSmall":
+      return renderSmall();
+    case "systemMedium":
+      return renderMedium();
+    case "systemExtraLarge":
+      return renderExtraLarge();
+    case "systemLarge":
+    default:
+      return renderLarge();
+  }
 }
