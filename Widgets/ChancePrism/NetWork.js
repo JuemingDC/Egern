@@ -56,14 +56,14 @@ const C = {
 };
 
 const ICON_URLS = {
-  Netflix: "https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/Netflix_01.png",
-  "Disney+": "https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/DisneyPlus.png",
-  YouTube: "https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/YouTube_01.png",
-  OpenAI: "https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/ChatGPT.png",
-  TikTok: "https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/TikTok_01.png",
-  Spotify: "https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/Spotify_01.png",
-  Claude: "https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/Claude_01.png",
-  Gemini: "https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/Gemini_01.png",
+  Netflix: "https://cdn.jsdelivr.net/gh/fmz200/wool_scripts@main/icons/apps/Netflix_01.png",
+"Disney+": "https://cdn.jsdelivr.net/gh/fmz200/wool_scripts@main/icons/apps/DisneyPlus.png",
+YouTube: "https://cdn.jsdelivr.net/gh/fmz200/wool_scripts@main/icons/apps/YouTube_01.png",
+OpenAI: "https://cdn.jsdelivr.net/gh/fmz200/wool_scripts@main/icons/apps/ChatGPT.png",
+TikTok: "https://cdn.jsdelivr.net/gh/fmz200/wool_scripts@main/icons/apps/TikTok_01.png",
+Spotify: "https://cdn.jsdelivr.net/gh/fmz200/wool_scripts@main/icons/apps/Spotify_01.png",
+Claude: "https://cdn.jsdelivr.net/gh/fmz200/wool_scripts@main/icons/apps/Claude_01.png",
+Gemini: "https://cdn.jsdelivr.net/gh/fmz200/wool_scripts@main/icons/apps/Gemini_01.png",
 };
 
 const MEDIA_ALIASES = {
