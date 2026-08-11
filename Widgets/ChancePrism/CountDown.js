@@ -3,8 +3,9 @@
  * author: chance
  * category: 效率工具 / 多任务倒计时
  * converted: 2026-07-16
+ * updated: 2026-08-11
  * target: Egern
- * version: 2.1.0
+ * version: 2.1.1
  *
  * 环境变量：
  * name1=论文总结
@@ -19,7 +20,8 @@
  * - Medium：最多 2 个任务
  * - Large：最多 4 个任务
  * - ExtraLarge：最多 8 个任务
- * - 任务按截止日期排序；已逾期任务优先。
+ * - 任务按截止日期升序排列。
+ * - 截止日期当天继续显示；进入次日后，逾期任务自动从列表中移除。
  * - 倒计时统一以“天”为单位。
  * - 每个任务按实际显示数量等比分配高度。
  * - 移除图标实心色块，改为无底色 SF Symbol + 左侧状态线。
@@ -31,6 +33,7 @@ export default async function (ctx) {
   const family = ctx.widgetFamily || "systemLarge";
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayTime = today.getTime();
 
   const C = {
     bg: { light: "#F7F1E3", dark: "#201D18" },
@@ -71,38 +74,43 @@ export default async function (ctx) {
 
   function parseTasks() {
     const result = [];
+    let configuredCount = 0;
 
     for (let i = 1; i <= 20; i++) {
       const target = parseDateOnly(env[`date${i}`]);
       if (!target) continue;
 
+      configuredCount += 1;
+
+      const timestamp = target.getTime();
+
+      // 截止日当天仍有效；从次日 00:00 起不再进入任务列表。
+      if (timestamp < todayTime) continue;
+
       result.push({
         name: String(env[`name${i}`] || `任务 ${i}`).trim() || `任务 ${i}`,
         detail: String(env[`detail${i}`] || "").trim(),
         target,
-        timestamp: target.getTime(),
+        timestamp,
       });
     }
 
-    return result.sort((a, b) => {
-      const aExpired = a.timestamp < today.getTime();
-      const bExpired = b.timestamp < today.getTime();
-      if (aExpired !== bExpired) return aExpired ? -1 : 1;
-      return a.timestamp - b.timestamp;
-    });
+    return {
+      tasks: result.sort((a, b) => a.timestamp - b.timestamp),
+      configuredCount,
+    };
   }
 
-  const tasks = parseTasks();
+  const parsed = parseTasks();
+  const tasks = parsed.tasks;
+  const configuredCount = parsed.configuredCount;
 
   const refreshAfter = new Date(
     now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 5
   ).toISOString();
 
   function remainingDays(task) {
-    const diff = task.timestamp - today.getTime();
-    return diff >= 0
-      ? Math.ceil(diff / 86400000)
-      : -Math.ceil(Math.abs(diff) / 86400000);
+    return Math.ceil((task.timestamp - todayTime) / 86400000);
   }
 
   function formatDate(date) {
@@ -175,8 +183,8 @@ export default async function (ctx) {
 
   function dayMeta(task) {
     const days = remainingDays(task);
-    if (days < 0) return { label: "逾期", value: Math.abs(days), color: C.red };
     if (days === 0) return { label: "今天", value: null, color: C.red };
+
     return {
       label: "剩余",
       value: days,
@@ -344,6 +352,8 @@ export default async function (ctx) {
   }
 
   function emptyWidget() {
+    const hasConfigured = configuredCount > 0;
+
     return {
       type: "widget",
       refreshAfter,
@@ -353,9 +363,25 @@ export default async function (ctx) {
       children: [
         header(),
         spacer(),
-        icon("calendar.badge.exclamationmark", 32, C.secondary),
-        text("请配置 date1", "headline", "semibold", C.secondary, { textAlign: "center" }),
-        text("日期格式：YYYY-MM-DD", "caption1", "regular", C.secondary, { textAlign: "center" }),
+        icon(
+          hasConfigured ? "checkmark.circle" : "calendar.badge.exclamationmark",
+          32,
+          hasConfigured ? C.green : C.secondary
+        ),
+        text(
+          hasConfigured ? "暂无待办任务" : "请配置 date1",
+          "headline",
+          "semibold",
+          hasConfigured ? C.green : C.secondary,
+          { textAlign: "center" }
+        ),
+        text(
+          hasConfigured ? "已到期项目会自动移除" : "日期格式：YYYY-MM-DD",
+          "caption1",
+          "regular",
+          C.secondary,
+          { textAlign: "center" }
+        ),
         spacer(),
       ],
     };
@@ -387,7 +413,7 @@ export default async function (ctx) {
         text(day.value == null ? "今" : day.value, "title3", "bold", day.color, {
           textAlign: "center", minScale: 0.75,
         }),
-        text(day.value == null ? "天" : "天", "caption2", "medium", C.secondary, {
+        text("天", "caption2", "medium", C.secondary, {
           textAlign: "center",
         }),
       ],
