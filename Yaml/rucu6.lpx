@@ -1,34 +1,30 @@
-#!name = RuCu6 Loon UA Test
-#!desc = 测试 RuCu6 插件服务器实际需要匹配到哪一级 Loon User-Agent
+#!name = RuCu6 Loon UA
+#!desc = 为 RuCu6 Pages 全部资源模拟 Loon User-Agent，解决 Egern 拉取插件及其依赖脚本失败的问题
 #!author = chance
 #!date = 2026-09-18
-#!tag = 调试,兼容性,User-Agent
+#!category = 网络兼容 / User-Agent
 #!type = normal
 
 # ============================================================
-# 模块分类：网络兼容 / User-Agent 测试
-# 作者：chance
-# 创建时间：2026-09-18
+# RuCu6 Loon UA Compatibility
 #
-# 测试目标：
-# https://rucu6.pages.dev/Plugins/myblockads.lpx
+# Author: chance
+# Date: 2026-09-18
+# Category: 网络兼容 / User-Agent
 #
-# 测试顺序：
-# 1. Loon
-# 2. Loon/991
-# 3. 完整 UA
+# 
+# 已验证：
+# User-Agent = Loon
+# 可以使 Egern 正常拉取：
+# - /Plugins/*.lpx
+# - /Scripts/*.js
 #
-# 用于判断 RuCu6 服务端究竟检测：
-# - 仅 "Loon" 字样
-# - Loon Build
-# - 完整 CFNetwork / Darwin UA
+# 因此不再限制具体目录，统一处理 rucu6.pages.dev 全部资源，
+# 同时兼容未来新增的 Plugins / Scripts / Rules / Icons 等路径。
 # ============================================================
 
-[Argument]
-ua = select,"Loon","Loon/991","Loon/991 CFNetwork/3896.100.1.1.1 Darwin/27.0.0",tag=测试 UA,desc=依次选择三个 UA 测试 RuCu6 插件能否被 Egern 正常拉取
-
 [Rewrite]
-request if ${url} ~= /^https:\/\/rucu6\.pages\.dev\/Plugins\/myblockads\.lpx(?:\?.*)?$/ then request.header.set("User-Agent", "${ua}")
+request if ${url} ~= /^https:\/\/rucu6\.pages\.dev\// then request.header.set("User-Agent", "Loon")
 
 [Mitm]
 hostname = rucu6.pages.dev
